@@ -476,7 +476,8 @@ jobs:
     # and the release are one build), and a deployment is never cancelled
     # halfway. The repository's Pages source must be GitHub Actions.
     needs: [release]
-    if: ${{ github.ref == 'refs/heads/main' }}
+    # (the site is upstream's: forks have no Pages to publish to)
+    if: ${{ github.ref == 'refs/heads/main' && github.repository == 'OpenCommunityEdition/OpenCE' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
