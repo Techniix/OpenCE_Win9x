@@ -24,6 +24,9 @@ struct tag_relocation
 	/* a bit a byte of the tag cache: where a pointer moved starts (none
 	is moved twice); the caller's, cleared, of size/8 bytes */
 	unsigned long *marks;
+	/* (optional, for checks: a bit a byte of the tag cache, set where a tag's
+	root or a block's element is) */
+	unsigned long *elements;
 	long moved;
 	boolean failed;
 };
@@ -41,5 +44,9 @@ boolean tag_relocate_structure_bsp(struct tag_relocation *relocation, unsigned l
 
 /* whether a pointer starting at the tag cache's byte offset was moved */
 boolean tag_relocate_marked(struct tag_relocation const *relocation, unsigned long offset);
+
+/* whether the tag cache's byte offset is in a tag's root or a block's element
+(with elements given) */
+boolean tag_relocate_in_element(struct tag_relocation const *relocation, unsigned long offset);
 
 #endif

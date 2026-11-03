@@ -146,12 +146,14 @@ struct tag_relocation
 	unsigned long size;
 	unsigned long delta;
 	unsigned long *marks;
+	unsigned long *elements;
 	long moved;
 	unsigned char failed;
 };
 unsigned char tag_relocate_tags(struct tag_relocation *relocation, long tag_data_size);
 unsigned char tag_relocate_structure_bsp(struct tag_relocation *relocation, unsigned long link_address, long size);
 unsigned char tag_relocate_marked(struct tag_relocation const *relocation, unsigned long offset);
+unsigned char tag_relocate_in_element(struct tag_relocation const *relocation, unsigned long offset);
 unsigned char tag_validate_structure_bsp(long tag_index, void *base, long size);
 long tag_validate_corrections(void);
 unsigned char tag_validate_claimed(void const *address);
@@ -392,6 +394,9 @@ enum
 	MAXIMUM_RELOCATION_REPORTS = 12,
 };
 
+/* where the bsp being compared starts in the tag cache (0: the tags) */
+static unsigned long relocation_bsp_offset;
+
 struct relocation_snapshot
 {
 	unsigned char *bytes;
@@ -404,6 +409,12 @@ say roughly where something is */
 static void relocation_where(unsigned char const *tag_cache, unsigned long link, unsigned long offset,
 	char *text, size_t text_size)
 {
+	if (relocation_bsp_offset)
+	{
+		snprintf(text, text_size, "structure bsp +%lx", offset - relocation_bsp_offset);
+		return;
+	}
+	{
 	struct tag_header const *tags = (struct tag_header const *)tag_cache;
 	struct tag_instance const *instances;
 	unsigned long best = 0;
@@ -431,6 +442,7 @@ static void relocation_where(unsigned char const *tag_cache, unsigned long link,
 			(int)(group >> 8 & 0xFF), (int)(group & 0xFF),
 			name < TAG_CACHE_SIZE ? (char const *)tag_cache + name : "?", offset - best);
 	}
+	}
 }
 
 /* the relocated bytes (relocated, at the snapshot's offset of the tag cache)
@@ -444,6 +456,7 @@ static long relocation_compare(struct relocation_snapshot const *snapshot, unsig
 	long problems = 0;
 	char where[128];
 
+	relocation_bsp_offset = snapshot->offset;
 	while (index < snapshot->size)
 	{
 		unsigned long offset = snapshot->offset + index;
@@ -480,7 +493,9 @@ static long relocation_compare(struct relocation_snapshot const *snapshot, unsig
 			unsigned long a;
 
 			memcpy(&a, snapshot->bytes + index, 4);
-			if (a - TAG_CACHE_BASE_ADDRESS < TAG_CACHE_SIZE &&
+			/* (in tags' roots and blocks' elements only: vertices, pixels and
+			the like in data have words that look like addresses) */
+			if (a - TAG_CACHE_BASE_ADDRESS < TAG_CACHE_SIZE && tag_relocate_in_element(relocation, offset) &&
 				!tag_relocate_marked(relocation, offset + 1) && !tag_relocate_marked(relocation, offset + 2) &&
 				!tag_relocate_marked(relocation, offset + 3))
 			{
@@ -503,6 +518,7 @@ relocated (in relocated_cache): 0 if the two agree */
 static int map_relocation_check(char const *path, unsigned char *tag_cache, unsigned char *relocated_cache)
 {
 	static unsigned long marks[TAG_CACHE_SIZE / 32];
+	static unsigned long elements[TAG_CACHE_SIZE / 32];
 	struct relocation_snapshot snapshots[1 + MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO];
 	struct cache_file_header header;
 	struct tag_relocation relocation;
@@ -536,7 +552,9 @@ static int map_relocation_check(char const *path, unsigned char *tag_cache, unsi
 		relocation.size = TAG_CACHE_SIZE;
 		relocation.delta = (unsigned long)cache - TAG_CACHE_BASE_ADDRESS;
 		relocation.marks = marks;
+		relocation.elements = elements;
 		memset(marks, 0, sizeof(marks));
+		memset(elements, 0, sizeof(elements));
 
 		memset(cache, 0xCD, TAG_CACHE_SIZE);
 		memcpy(cache, bytes + header.tag_data_offset, header.tag_data_size);
@@ -589,6 +607,8 @@ static int map_relocation_check(char const *path, unsigned char *tag_cache, unsi
 			/* (a bsp's marks are its own: the last one's are cleared) */
 			memset((unsigned char *)marks + header.tag_data_size / 8, 0,
 				sizeof(marks) - header.tag_data_size / 8);
+			memset((unsigned char *)elements + header.tag_data_size / 8, 0,
+				sizeof(elements) - header.tag_data_size / 8);
 			relocation.moved = 0;
 			memset(cache + header.tag_data_size, 0xCD, TAG_CACHE_SIZE - header.tag_data_size);
 			memcpy(cache + load, bytes + reference->file_offset, reference->file_size);

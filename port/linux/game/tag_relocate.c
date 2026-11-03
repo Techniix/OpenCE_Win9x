@@ -14,7 +14,9 @@ the tag cache is moved by the same delta, before the validator checks them
 The pointers are found as the validator finds them, through the tag groups'
 schemas (tag_schema.h), which list every block, data and reference of every
 tag, and in the places the schemas do not list: the tags' header and table,
-the vertex and index buffers' data, a scenario's structure bsp references'
+the vertex and index buffers' data, the buffers a model's parts and a
+structure bsp's materials draw from (their checks', model_geometry_part_check
+and structure_bsp_check, not fields), a scenario's structure bsp references'
 load addresses, and a structure bsp's header. The tags are not trusted yet:
 a pointer is followed only where its bytes lie in the tag cache, none is
 moved twice, and the walk goes no deeper than the validator's.
@@ -27,6 +29,8 @@ pointers moved only.
 /* ---------- headers */
 
 #include "cseries.h"
+#include "rasterizer/rasterizer_geometry.h"
+#include "structures/structure_bsp_definitions.h"
 #include "tag_schema.h"
 #include "tag_relocate.h"
 
@@ -94,6 +98,15 @@ struct relocate_structure_bsp_header
 	unsigned long signature;
 };
 
+/* a model's part (models.c's struct model_geometry_part): its buffers */
+struct relocate_model_geometry_part
+{
+	byte unused[0x44];
+	struct triangle_buffer triangle_buffer;
+	struct vertex_buffer vertex_buffer;
+};
+
+typedef char verify_relocate_model_geometry_part_size[sizeof(struct relocate_model_geometry_part) == 0x68 ? 1 : -1];
 typedef char verify_relocate_instance_size[sizeof(struct relocate_instance) == 0x20 ? 1 : -1];
 typedef char verify_relocate_header_size[sizeof(struct relocate_header) == 0x24 ? 1 : -1];
 typedef char verify_relocate_structure_bsp_header_size[sizeof(struct relocate_structure_bsp_header) == 0x18 ? 1 : -1];
@@ -236,6 +249,37 @@ static void relocate_fields(
 	return;
 }
 
+/* the buffers a model's part or a structure bsp's material draws from: their
+D3D buffers in the header's (hardware_format), and their base_address */
+static void relocate_drawn_buffers(
+	struct tag_relocation *relocation,
+	byte *base,
+	struct tag_schema_definition const *definition)
+{
+	unsigned long linked;
+
+	if (!strcmp(definition->name, "model_geometry_part"))
+	{
+		struct relocate_model_geometry_part *part = (struct relocate_model_geometry_part *)base;
+
+		pointer_move(relocation, (byte *)&part->triangle_buffer.base_address, &linked);
+		pointer_move(relocation, (byte *)&part->triangle_buffer.hardware_format, &linked);
+		pointer_move(relocation, (byte *)&part->vertex_buffer.base_address, &linked);
+		pointer_move(relocation, (byte *)&part->vertex_buffer.hardware_format, &linked);
+	}
+	else if (!strcmp(definition->name, "structure_material"))
+	{
+		struct structure_material *material = (struct structure_material *)base;
+
+		pointer_move(relocation, (byte *)&material->vertices.base_address, &linked);
+		pointer_move(relocation, (byte *)&material->vertices.hardware_format, &linked);
+		pointer_move(relocation, (byte *)&material->lightmap_vertices.base_address, &linked);
+		pointer_move(relocation, (byte *)&material->lightmap_vertices.hardware_format, &linked);
+	}
+
+	return;
+}
+
 static void relocate_element(
 	struct tag_relocation *relocation,
 	byte *base,
@@ -247,7 +291,18 @@ static void relocate_element(
 		relocation->failed = TRUE;
 		return;
 	}
+	/* (an element's bytes, for checks: a word in them that points into the
+	tag cache and was not moved is a pointer missed) */
+	if (relocation->elements)
+	{
+		unsigned long offset = (unsigned long)(base - relocation->cache);
+		unsigned long end = offset + (unsigned long)definition->size;
+
+		for (; offset < end && offset < relocation->size; offset++)
+			relocation->elements[offset / MARK_BITS] |= 1UL << (offset % MARK_BITS);
+	}
 	relocate_fields(relocation, base, definition, depth);
+	relocate_drawn_buffers(relocation, base, definition);
 
 	return;
 }
@@ -390,4 +445,12 @@ boolean tag_relocate_marked(
 	unsigned long offset)
 {
 	return offset < relocation->size && marked(relocation, offset);
+}
+
+boolean tag_relocate_in_element(
+	struct tag_relocation const *relocation,
+	unsigned long offset)
+{
+	return relocation->elements && offset < relocation->size &&
+		((relocation->elements[offset / MARK_BITS] >> (offset % MARK_BITS)) & 1);
 }
