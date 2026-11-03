@@ -13,9 +13,9 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). `probe/results/` has its reports. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
 | Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
-| Compiling (`build.py`, `include/`, `src/`) | All 886 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers: the game through hybrid precision, the Windows build's platform layer, the third-party libraries. Not linked yet: what the link lacks is below. |
+| Compiling and linking (`build.py`, `include/`, `src/`, `runtime/`) | All 900 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers, and link into build/win98/halo.exe: the game through hybrid precision, the Windows build's platform layer, the third-party libraries, and what Windows 9x lacks (below). Not yet run on Windows 98: the first runs are below. |
+| SDL 3 | `port/retro_sdl`: the SDL 3 functions the platform layer calls, on Win32 (Windows 95 and later). Not yet run. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
-| Win32 replacement for SDL3 | Not started. |
 
 ## Maths: hybrid precision
 
@@ -127,7 +127,7 @@ are; `src/win9x_precision.c` keeps the x87 in single precision when the game
 resets it; `src/win9x_linux_crt.c` gives the game's units the C runtime under
 the Linux build's names.
 
-## What the link still lacks
+## What Windows 9x lacks
 
 `build.py` links build/win98/halo.exe with the build's own runtime
 (`runtime/`: start-up, static constructors, thread-local storage, the stack
@@ -137,12 +137,33 @@ that the linker takes those. What Windows 98 lacks is in `src/`:
 
 | File | What |
 | --- | --- |
+| `win9x_unicode.c` | What Windows 9x has in name only, or not at all, and NT has: the wide-character functions the platform layer calls (on the ANSI ones, names in the system's code page), NT's security (nothing to do on a FAT disk: a token of one user, access lists that change nothing), `SwitchToThread`, `TryEnterCriticalSection`, `GetProcessTimes`, and iphlpapi.dll's functions (looked up, as Windows 95 has none). On Windows NT each calls the system's own. |
 | `win9x_compat.c` | Condition variables (on a semaphore), vectored exception handlers (on `SetUnhandledExceptionFilter`, for the texture watch), `GetFileSizeEx`, `SetFilePointerEx`, `GlobalMemoryStatusEx`, `BCryptGenRandom` and `rand_s` (CryptoAPI), the newer C runtime's `*_s` functions and stdio, and failing stubs for what Windows 9x does without: WinHTTP (the updater and crash uploads), DbgHelp's minidumps, the firmware table, `AttachConsole`. |
 | `win9x_crt.c` | C99's float maths and 64-bit conversions, and what mingw-w64's headers expect its runtime library to define. |
-| `win9x_net.c` | `getaddrinfo`, `freeaddrinfo`, `getnameinfo` on `gethostbyname` (IPv4). |
-| `win9x_precision.c` | `_control87`, which keeps the x87 in single precision. |
+| `win9x_net.c` | `getaddrinfo`, `freeaddrinfo`, `getnameinfo` on `gethostbyname` (IPv4); `WSASocketW` on `socket`. |
+| `win9x_precision.c` | `_control87`, which keeps the x87 in single precision, and the same for each thread port/retro_sdl starts. |
 | `win9x_linux_crt.c` | The C runtime under the Linux build's names, for the game's units. |
 
-What is left (`build/win98/undefined.txt`) is SDL 3's 146 functions: an
-SDL-compatible layer of the build's own, with a backend per system (Win32
-first; Mac OS 9 and DOS can add theirs).
+SDL 3's functions are port/retro_sdl's (its README). The program imports
+309 functions from msvcrt, kernel32, user32, gdi32, advapi32, ws2_32,
+winmm, shell32, comdlg32 and opengl32, all of which Windows 98 should have;
+`probe/import_check.exe` says which a machine lacks.
+
+## First runs
+
+On Linux (WSL):
+
+    python3 port/win98/build.py
+    MINGW_SOURCE=build/win98/third_party/mingw-w64 OUT=build/win98/probe port/win98/probe/build.sh
+    python3 port/win98/tools/make_iso.py build/win98/opence.iso build/win98/halo.exe \
+        build/win98/probe/import_check.exe port/win98/tools/first_boot.toml /mnt/c/Games/OpenCE/maps
+
+make_iso.py writes a CD image (with long names) for the emulator's CD
+drive. On Windows 98, copy its files into a folder on the disk, rename
+first_boot.toml to config.toml and clear its read-only attribute
+(`attrib -r config.toml`), then:
+
+1. Run import_check.exe: it lists in import_check.txt whatever halo.exe
+   imports that this Windows lacks (none, if all is well).
+2. Run halo.exe: first_boot.toml runs it without drawing or sound, and
+   quits after a minute. halo.log beside it says how far it got.

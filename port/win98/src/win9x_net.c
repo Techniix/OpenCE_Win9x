@@ -184,3 +184,36 @@ void WINAPI WspiapiFreeAddrInfo(struct addrinfo *information)
 {
 	freeaddrinfo(information);
 }
+
+/* WSASocketW: on Windows 9x, socket's (whose sockets take overlapped
+operations, as the flag asks); elsewhere ws2_32.dll's own, without the flag
+Windows 7 SP1 added if the system does not know it */
+#ifndef WSA_FLAG_NO_HANDLE_INHERIT
+#define WSA_FLAG_NO_HANDLE_INHERIT 0x80
+#endif
+
+SOCKET WSAAPI WSASocketW(int family, int type, int protocol, LPWSAPROTOCOL_INFOW information, GROUP group,
+	DWORD flags)
+{
+	typedef SOCKET (WSAAPI *proc)(int, int, int, LPWSAPROTOCOL_INFOW, GROUP, DWORD);
+	static proc system_socket;
+	SOCKET result;
+
+	if ((GetVersion() & 0x80000000) || information)
+	{
+		if (information)
+		{
+			WSASetLastError(WSAEINVAL);
+			return INVALID_SOCKET;
+		}
+		return socket(family, type, protocol);
+	}
+	if (!system_socket)
+		system_socket = (proc)GetProcAddress(GetModuleHandleA("ws2_32.dll"), "WSASocketW");
+	if (!system_socket)
+		return socket(family, type, protocol);
+	result = system_socket(family, type, protocol, information, group, flags);
+	if (result == INVALID_SOCKET && (flags & WSA_FLAG_NO_HANDLE_INHERIT) && WSAGetLastError() == WSAEINVAL)
+		result = system_socket(family, type, protocol, information, group, flags & ~WSA_FLAG_NO_HANDLE_INHERIT);
+	return result;
+}

@@ -1,0 +1,20 @@
+# The Windows 9x build's first runs (port/win98/README.md): no drawing, no
+# sound, nothing reached over the internet; quit after a minute. Copy it
+# beside halo.exe as config.toml, and clear its read-only attribute if it
+# came from a CD (attrib -r config.toml): the game writes its settings there.
+
+[debug]
+null_renderer = true
+exit_after = 60.0
+
+[audio]
+enabled = false
+
+[update]
+auto = false
+
+[crash_reports]
+upload = "no"
+
+[discord]
+application_id = ""
