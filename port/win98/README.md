@@ -166,4 +166,10 @@ first_boot.toml to config.toml and clear its read-only attribute
 1. Run import_check.exe: it lists in import_check.txt whatever halo.exe
    imports that this Windows lacks (none, if all is well).
 2. Run halo.exe: first_boot.toml runs it without drawing or sound, and
-   quits after a minute. halo.log beside it says how far it got.
+   quits after a minute. halo.log beside it is the game's log (there is no
+   console). halo_trace.txt is the start-up's: its stages, and every five
+   seconds where the main thread is (`runtime/win9x_watch.c`), which
+
+       python3 port/win98/tools/symbolize.py halo_trace.txt
+
+   names from build/win98/halo.map, the same build's.

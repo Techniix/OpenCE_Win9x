@@ -271,7 +271,7 @@ def runtime_units(system, builtins: Path):
     """the build's own start-up, thread-local storage and stack probe
     (port/win98/runtime), and the compiler's 64-bit division"""
     flags = TARGET + ["-g0", "-O2", "-std=gnu11", "-D_WIN32_WINNT=0x0410", "-DWIN32_LEAN_AND_MEAN"] + system["all"]
-    units = [(f"port/win98/runtime/{name}", flags, False) for name in ("win9x_start.c", "win9x_tls.c")]
+    units = [(f"port/win98/runtime/{name}", flags, False) for name in ("win9x_start.c", "win9x_tls.c", "win9x_watch.c")]
     units.append(("port/win98/runtime/win9x_chkstk.S", TARGET, False))
     for name in COMPILER_RT_BUILTINS:
         units.append((str(builtins / name), TARGET + ["-g0", "-O2", "-w"] + system["crt"], False))
@@ -382,14 +382,15 @@ def import_libraries(mingw: Path, defined):
 
 
 def link(objects, lib: Path):
-    """halo.exe for Windows 4.0 (95, 98, Me; NT 4), with the console (the
-    debug build logs there); the linker's undefined symbols listed"""
+    """halo.exe for Windows 4.0 (95, 98, Me; NT 4), without a console (the
+    log goes to halo.log, runtime/win9x_start.c), and its map (halo.map,
+    for tools/symbolize.py); the linker's undefined symbols listed"""
     output = BUILD / "halo.exe"
     response = BUILD / "link.rsp"
     response.write_text("\n".join(str(obj) for obj in objects) + "\n")
     command = ["clang", *TARGET, "-fuse-ld=lld", "-nostdlib", "-o", str(output), f"@{response}", f"-L{lib}",
                *[f"-l{name}" for name in DLLS],
-               "-Wl,--entry,_mainCRTStartup", "-Wl,--subsystem,console:4.0",
+               "-Wl,--entry,_mainCRTStartup", "-Wl,--subsystem,windows:4.0", f"-Wl,-Map={BUILD / 'halo.map'}",
                "-Wl,--major-os-version,4", "-Wl,--minor-os-version,0",
                "-Wl,--disable-dynamicbase", "-Wl,--disable-nxcompat", "-Wl,--build-id=none",
                "-Wl,--stack,0x800000", "-Wl,--error-limit=0"]

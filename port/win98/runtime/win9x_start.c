@@ -6,6 +6,9 @@ not linked: the build uses msvcrt.dll as Windows 98 has it, and nothing
 newer). The entry point:
 - puts the x87 in single precision, as the game's code runs (hybrid
   precision, port/win98/README.md), before any of it runs;
+- starts the trace (win9x_watch.c, halo_trace.txt);
+- sends stderr, the game's log, to halo.log beside halo.exe (a program for
+  the Windows subsystem has no console);
 - gets the command line from msvcrt.dll (__getmainargs);
 - runs main, which runs the static constructors first (__main, which clang
   calls at main's start on the GNU target), and exits with what it returns.
@@ -13,7 +16,13 @@ The constructors are the ones lld lists from the objects' .ctors sections,
 by priority (__CTOR_LIST__: a count or -1, the functions, then 0).
 */
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include "win9x_watch.h"
 
 typedef void (*constructor)(void);
 
@@ -55,6 +64,29 @@ void __main(void)
 	while (count > 0)
 		__CTOR_LIST__[count--]();
 	atexit(destructors_run);
+	win9x_trace("constructors run");
+}
+
+/* (as the Windows build's release does, win32_posix.c, which leaves a
+stderr that goes somewhere as it is: msvcrt.dll's stderr always has a
+descriptor, so that test does not see that there is no console) */
+static void log_open(void)
+{
+	HANDLE handle = GetStdHandle(STD_ERROR_HANDLE);
+	char path[MAX_PATH];
+	DWORD length;
+	char *slash;
+
+	if (handle && handle != INVALID_HANDLE_VALUE)
+		return;
+	length = GetModuleFileNameA(NULL, path, sizeof(path));
+	slash = length && length < sizeof(path) ? strrchr(path, '\\') : NULL;
+	if (!slash || (size_t)(slash + 1 - path) + sizeof("halo.log") > sizeof(path))
+		return;
+	strcpy(slash + 1, "halo.log");
+	if (freopen(path, "w", stderr))
+		setvbuf(stderr, NULL, _IONBF, 0);
+	win9x_trace(stderr ? "log: halo.log" : "log: none");
 }
 
 /* the entry point (the linker's --entry) */
@@ -66,9 +98,13 @@ void mainCRTStartup(void)
 	char **environment;
 
 	x87_precision_single();
-	/* (_CONSOLE_APP: the debug builds log to the console) */
-	__set_app_type(1);
+	win9x_watch_start();
+	win9x_trace("start");
+	/* (_GUI_APP) */
+	__set_app_type(2);
 	__getmainargs(&argc, &argv, &environment, 0, &information);
+	log_open();
 	__main();
+	win9x_trace("main");
 	exit(main(argc, argv));
 }
