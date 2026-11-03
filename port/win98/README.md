@@ -173,3 +173,9 @@ first_boot.toml to config.toml and clear its read-only attribute
        python3 port/win98/tools/symbolize.py halo_trace.txt
 
    names from build/win98/halo.map, the same build's.
+3. Run retro_sdl_test.exe (port/retro_sdl/test, built with halo.exe): a
+   window, its keyboard and mouse, fullscreen, OpenGL and a tone, through
+   the same SDL layer as the game; retro_sdl_test.log beside it has what it
+   found, the OpenGL driver's version and extensions among it.
+4. With sound_test.toml as config.toml, halo.exe plays the main menu's
+   music, still without drawing.

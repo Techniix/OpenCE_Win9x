@@ -25,3 +25,9 @@ Sound is 16-bit through waveOut, at the stream's rate if the device takes
 it, else 44.1, 22.05 or 11.025 kHz, resampled linearly, and down-mixed to
 stereo or mono. Fullscreen changes the display's mode, as Windows 9x
 programs did.
+
+`test/retro_sdl_test.c` checks a backend on the machine itself, apart from
+the game: a window with an OpenGL context (and the driver's version and
+extensions), its keyboard and mouse, fullscreen, the pointer's relative
+mode, a thread and a condition, and a tone. The Windows 9x build makes it
+as build/win98/retro_sdl_test.exe.

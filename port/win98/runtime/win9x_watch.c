@@ -5,7 +5,8 @@ Where the program is, while nothing else says so (the Windows 9x build's
 first runs): a thread that, every few seconds, stops the main thread for a
 moment, notes its instruction pointer and the return addresses on its stack
 (each word there that points into halo.exe's code), and writes them to
-halo_trace.txt beside halo.exe, with the start-up's stages.
+halo_trace.txt beside halo.exe (the program's name, _trace.txt), with the
+start-up's stages.
 port/win98/tools/symbolize.py names them from build/win98/halo.map.
 
 On unless halo_trace.txt cannot be written; HALO_NO_TRACE turns it off.
@@ -139,15 +140,18 @@ void win9x_watch_start(void)
 	started = GetTickCount();
 	if (GetEnvironmentVariableA("HALO_NO_TRACE", path, sizeof(path)))
 		return;
+	/* (the program's name, _trace.txt for .exe: halo_trace.txt) */
 	length = GetModuleFileNameA(NULL, path, sizeof(path) - 16);
 	for (at = path; at < path + length; at++)
 	{
-		if (*at == '\\')
+		if (*at == '.')
 			slash = at;
+		else if (*at == '\\')
+			slash = NULL;
 	}
 	if (!slash)
 		return;
-	lstrcpyA(slash + 1, "halo_trace.txt");
+	lstrcpyA(slash, "_trace.txt");
 	trace_file = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
 		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, NULL);
 	if (trace_file == INVALID_HANDLE_VALUE)

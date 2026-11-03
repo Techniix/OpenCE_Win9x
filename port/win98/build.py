@@ -409,6 +409,35 @@ def import_libraries(mingw: Path, defined):
     return lib
 
 
+def retro_sdl_test(sdl: Path, system, support, start, lib: Path) -> bool:
+    """build/win98/retro_sdl_test.exe (port/retro_sdl/test): the SDL layer
+    on the machine, apart from the game; linked against an archive of the
+    build's other objects, of which the linker takes what it needs"""
+    archive = BUILD / "lib" / "libsupport.a"
+    archive.unlink(missing_ok=True)
+    subprocess.run(["llvm-ar", "rcs", str(archive), *map(str, support)], check=True)
+    source = "port/retro_sdl/test/retro_sdl_test.c"
+    obj = OBJ / "retro_sdl_test.o"
+    flags = TARGET + ["-g0", "-O2", "-std=gnu11", "-D_WIN32_WINNT=0x0410", f"-I{sdl}", "-Wall"] + system["all"]
+    r = subprocess.run(["clang", *flags, "-c", source, "-o", str(obj)], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode:
+        print(r.stderr)
+        return False
+    output = BUILD / "retro_sdl_test.exe"
+    command = ["clang", *TARGET, "-fuse-ld=lld", "-nostdlib", "-o", str(output), str(obj), *map(str, start),
+               "-lsupport", f"-L{lib}", *[f"-l{name}" for name in DLLS],
+               "-Wl,--entry,_mainCRTStartup", "-Wl,--subsystem,windows:4.0",
+               "-Wl,--major-os-version,4", "-Wl,--minor-os-version,0",
+               "-Wl,--disable-dynamicbase", "-Wl,--disable-nxcompat", "-Wl,--build-id=none",
+               "-Wl,--disable-auto-import", "-Wl,--disable-runtime-pseudo-reloc"]
+    r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+    if r.returncode:
+        print("\n".join(line for line in r.stderr.splitlines() if "error" in line)[:3000])
+        return False
+    print(f"linked {output}")
+    return calls_checked(output)
+
+
 def link(objects, lib: Path):
     """halo.exe for Windows 4.0 (95, 98, Me; NT 4), without a console (the
     log goes to halo.log, runtime/win9x_start.c), and its map (halo.map,
@@ -520,7 +549,18 @@ def main() -> None:
 
     objects = [object_path(source) for source, _, _ in units]
     lib = import_libraries(mingw, defined_symbols(objects))
-    sys.exit(0 if link(objects, lib) else 1)
+    if not link(objects, lib):
+        sys.exit(1)
+    # port/retro_sdl's check, on what the game links but its own units
+    game = {object_path(source) for source, _, hybrid in units if hybrid}
+    # (the start-up, and what replaces Windows' own functions, linked
+    # whole: a call through an import's pointer names the import, not the
+    # definition, and so would not take the definition from an archive)
+    whole = [obj for obj in objects if obj.name.startswith(("port__win98__runtime__", "port__win98__src__")) and
+             "linux_crt" not in obj.name]
+    support = [obj for obj in objects if obj not in game and obj not in whole]
+    start = whole
+    sys.exit(0 if retro_sdl_test(sdl, system, support, start, lib) else 1)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,19 @@
+# The Windows 9x build without drawing but with sound (port/win98/README.md):
+# the main menu's music should play through waveOut for a minute. Copy it
+# beside halo.exe as config.toml (attrib -r config.toml if from a CD).
+
+[debug]
+null_renderer = true
+exit_after = 60.0
+
+[audio]
+enabled = true
+
+[update]
+auto = false
+
+[crash_reports]
+upload = "no"
+
+[discord]
+application_id = ""

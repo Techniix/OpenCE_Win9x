@@ -7,8 +7,8 @@ newer). The entry point:
 - puts the x87 in single precision, as the game's code runs (hybrid
   precision, port/win98/README.md), before any of it runs;
 - starts the trace (win9x_watch.c, halo_trace.txt);
-- sends stderr, the game's log, to halo.log beside halo.exe (a program for
-  the Windows subsystem has no console);
+- sends stderr, the game's log, to halo.log beside halo.exe (the program's
+  name, .log; a program for the Windows subsystem has no console);
 - gets the command line from msvcrt.dll (__getmainargs);
 - runs main, which runs the static constructors first (__main, which clang
   calls at main's start on the GNU target), and exits with what it returns.
@@ -79,14 +79,15 @@ static void log_open(void)
 
 	if (handle && handle != INVALID_HANDLE_VALUE)
 		return;
-	length = GetModuleFileNameA(NULL, path, sizeof(path));
-	slash = length && length < sizeof(path) ? strrchr(path, '\\') : NULL;
-	if (!slash || (size_t)(slash + 1 - path) + sizeof("halo.log") > sizeof(path))
+	/* (the program's name, .log for .exe: halo.log) */
+	length = GetModuleFileNameA(NULL, path, sizeof(path) - 4);
+	slash = length && length < sizeof(path) - 4 ? strrchr(path, '.') : NULL;
+	if (!slash || strchr(slash, '\\'))
 		return;
-	strcpy(slash + 1, "halo.log");
+	strcpy(slash, ".log");
 	if (freopen(path, "w", stderr))
 		setvbuf(stderr, NULL, _IONBF, 0);
-	win9x_trace(stderr ? "log: halo.log" : "log: none");
+	win9x_trace(stderr ? "log: opened" : "log: none");
 }
 
 /* the entry point (the linker's --entry), with EBP cleared: the game's
