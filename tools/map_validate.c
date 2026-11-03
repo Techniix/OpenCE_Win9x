@@ -43,7 +43,9 @@ cache: pointers the game never reads, which the schemas leave out (the
 editor's data in a scenario), or data that looks like an address.
 
 usage: map_validate [--strict] [--quiet] [--maps folder] [--fuzz iterations [--seed n] [--log file]]
-	[--relocation] map.map...
+	[--relocation] map.map|folder...
+
+A folder stands for every .map file in it.
 */
 
 #include <stdarg.h>
@@ -51,6 +53,9 @@ usage: map_validate [--strict] [--quiet] [--maps folder] [--fuzz iterations [--s
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <dirent.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -1245,6 +1250,150 @@ static enum cache_file_format file_format(char const *path)
 	}
 }
 
+/* ---------- what to check */
+
+/* the options and the tag caches main sets up */
+static unsigned char *check_tag_cache;
+static unsigned char *check_custom_edition_tag_cache;
+static unsigned char *check_relocated_cache;
+static int check_relocation;
+static int check_strict;
+static long check_fuzz_iterations;
+static unsigned long check_seed = 1;
+/* (--relocation's summary) */
+static long relocation_maps;
+static long relocation_failed_maps;
+
+/* a map file, checked as the options say: 1 if it failed */
+static int map_file_check(char const *path)
+{
+	unsigned char *tag_cache = check_tag_cache;
+	unsigned char *custom_edition_tag_cache = check_custom_edition_tag_cache;
+	unsigned char *relocated_cache = check_relocated_cache;
+	int relocation = check_relocation;
+	int strict = check_strict;
+	long fuzz_iterations = check_fuzz_iterations;
+	unsigned long seed = check_seed;
+	long corrections;
+	int failed = 0;
+
+	switch (file_format(path))
+	{
+	case _cache_file_format_resource_map:
+		if (!quiet)
+			printf("%s: a resource map, passed over\n", path);
+		return failed;
+	case _cache_file_format_custom_edition_cache:
+		if (custom_edition_validate(path, custom_edition_tag_cache, &corrections, seed, fuzz_iterations))
+		{
+			if (!fuzz_iterations)
+				printf("%s: refused\n", path);
+			failed = 1;
+		}
+		else if (!fuzz_iterations)
+		{
+			printf("%s: %ld corrections\n", path, corrections);
+			if (strict && corrections)
+				failed = 1;
+		}
+		fflush(stdout);
+		return failed;
+	default:
+		break;
+	}
+	if (relocation)
+	{
+		relocation_maps++;
+		if (map_relocation_check(path, tag_cache, relocated_cache))
+		{
+			relocation_failed_maps++;
+			failed = 1;
+		}
+		fflush(stdout);
+		return failed;
+	}
+	if (fuzz_iterations)
+	{
+		if (map_fuzz(path, tag_cache, seed, fuzz_iterations))
+			failed = 1;
+		fflush(stdout);
+		return failed;
+	}
+	if (map_validate(path, tag_cache, &corrections))
+	{
+		printf("%s: refused\n", path);
+		failed = 1;
+	}
+	else
+	{
+		printf("%s: %ld corrections\n", path, corrections);
+		if (strict && corrections)
+			failed = 1;
+	}
+	fflush(stdout);
+
+	return failed;
+}
+
+static int map_name_compare(void const *a, void const *b)
+{
+	return strcmp(*(char *const *)a, *(char *const *)b);
+}
+
+/* every .map file in a folder (not its subfolders), in name order: 1 if any
+failed */
+static int map_folder_check(char const *folder)
+{
+	DIR *directory = opendir(folder);
+	struct dirent *entry;
+	char **paths = NULL;
+	long count = 0;
+	long capacity = 0;
+	long index;
+	int failed = 0;
+
+	if (!directory)
+	{
+		printf("%s: cannot be read\n", folder);
+		return 1;
+	}
+	while ((entry = readdir(directory)) != NULL)
+	{
+		size_t length = strlen(entry->d_name);
+		struct stat status;
+		char *path;
+
+		if (length < 5 || strcasecmp(entry->d_name + length - 4, ".map"))
+			continue;
+		path = malloc(strlen(folder) + length + 2);
+		sprintf(path, "%s/%s", folder, entry->d_name);
+		if (stat(path, &status) || !S_ISREG(status.st_mode))
+		{
+			free(path);
+			continue;
+		}
+		if (count == capacity)
+		{
+			capacity = capacity ? capacity * 2 : 64;
+			paths = realloc(paths, capacity * sizeof(*paths));
+		}
+		paths[count++] = path;
+	}
+	closedir(directory);
+	if (!count)
+		printf("%s: no .map files in it\n", folder);
+	qsort(paths, count, sizeof(*paths), map_name_compare);
+	for (index = 0; index < count; index++)
+	{
+		if (map_file_check(paths[index]))
+			failed = 1;
+		free(paths[index]);
+	}
+	free(paths);
+
+	return failed;
+}
+
 int main(int argc, char **argv)
 {
 	unsigned char *tag_cache;
@@ -1272,18 +1421,21 @@ int main(int argc, char **argv)
 			(unsigned long)CUSTOM_EDITION_TAG_CACHE_ADDRESS);
 		return 2;
 	}
+	check_tag_cache = tag_cache;
+	check_custom_edition_tag_cache = custom_edition_tag_cache;
 	for (argument = 1; argument < argc; argument++)
 	{
-		long corrections;
 
 		if (!strcmp(argv[argument], "--strict"))
 		{
 			strict = 1;
+			check_strict = 1;
 			continue;
 		}
 		if (!strcmp(argv[argument], "--relocation"))
 		{
 			relocation = 1;
+			check_relocation = 1;
 			relocated_cache = mmap((void *)RELOCATED_TAG_CACHE_ADDRESS, TAG_CACHE_SIZE, PROT_READ | PROT_WRITE,
 				MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
 			if (relocated_cache != (unsigned char *)RELOCATED_TAG_CACHE_ADDRESS)
@@ -1292,6 +1444,7 @@ int main(int argc, char **argv)
 					RELOCATED_TAG_CACHE_ADDRESS);
 				return 2;
 			}
+			check_relocated_cache = relocated_cache;
 			continue;
 		}
 		if (!strcmp(argv[argument], "--quiet"))
@@ -1302,6 +1455,7 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[argument], "--fuzz") && argument + 1 < argc)
 		{
 			fuzz_iterations = strtol(argv[++argument], NULL, 10);
+			check_fuzz_iterations = fuzz_iterations;
 			quiet = 1;
 			signal(SIGSEGV, fuzz_signal);
 			signal(SIGBUS, fuzz_signal);
@@ -1317,6 +1471,7 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[argument], "--seed") && argument + 1 < argc)
 		{
 			seed = strtoul(argv[++argument], NULL, 10);
+			check_seed = seed;
 			continue;
 		}
 		if (!strcmp(argv[argument], "--maps") && argument + 1 < argc)
@@ -1324,56 +1479,26 @@ int main(int argc, char **argv)
 			resource_maps_folder = argv[++argument];
 			continue;
 		}
-		switch (file_format(argv[argument]))
 		{
-		case _cache_file_format_resource_map:
-			if (!quiet)
-				printf("%s: a resource map, passed over\n", argv[argument]);
-			continue;
-		case _cache_file_format_custom_edition_cache:
-			if (custom_edition_validate(argv[argument], custom_edition_tag_cache, &corrections, seed, fuzz_iterations))
+			struct stat status;
+
+			/* (a folder: every map in it) */
+			if (!stat(argv[argument], &status) && S_ISDIR(status.st_mode))
 			{
-				if (!fuzz_iterations)
-					printf("%s: refused\n", argv[argument]);
-				failed = 1;
-			}
-			else if (!fuzz_iterations)
-			{
-				printf("%s: %ld corrections\n", argv[argument], corrections);
-				if (strict && corrections)
+				if (map_folder_check(argv[argument]))
 					failed = 1;
 			}
-			fflush(stdout);
-			continue;
-		default:
-			break;
-		}
-		if (relocation)
-		{
-			if (map_relocation_check(argv[argument], tag_cache, relocated_cache))
+			else if (map_file_check(argv[argument]))
+			{
 				failed = 1;
-			fflush(stdout);
-			continue;
+			}
 		}
-		if (fuzz_iterations)
-		{
-			if (map_fuzz(argv[argument], tag_cache, seed, fuzz_iterations))
-				failed = 1;
-			fflush(stdout);
-			continue;
-		}
-		if (map_validate(argv[argument], tag_cache, &corrections))
-		{
-			printf("%s: refused\n", argv[argument]);
-			failed = 1;
-		}
-		else
-		{
-			printf("%s: %ld corrections\n", argv[argument], corrections);
-			if (strict && corrections)
-				failed = 1;
-		}
-		fflush(stdout);
+	}
+
+	if (relocation)
+	{
+		printf("%ld maps relocated: %ld passed, %ld with problems\n", relocation_maps,
+			relocation_maps - relocation_failed_maps, relocation_failed_maps);
 	}
 
 	return failed;
