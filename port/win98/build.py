@@ -442,7 +442,8 @@ def calls_checked(program: Path) -> bool:
     """every direct call and jump in the program lands in its code: one that
     does not went to a symbol the link left at 0 (a weak external) or to
     an import's slot instead of through it (an auto-import, which needs
-    start-up code the build does not have)"""
+    start-up code the build does not have); and no function calls itself
+    before it can branch (endless recursion)"""
     headers = subprocess.run(["llvm-objdump", "-h", str(program)], capture_output=True, text=True).stdout
     text = re.search(r"\.text\s+([0-9a-f]+)\s+([0-9a-f]+)", headers)
     start = int(text.group(2), 16)
@@ -458,19 +459,28 @@ def calls_checked(program: Path) -> bool:
     disassembly = subprocess.run(["llvm-objdump", "-d", "--no-show-raw-insn", str(program)], capture_output=True,
                                  text=True).stdout
     function = "?"
+    function_start = 0
+    branched = False
     bad = []
     for line in disassembly.splitlines():
-        label = re.match(r"^[0-9a-f]+ <(.*)>:", line)
+        label = re.match(r"^([0-9a-f]+) <(.*)>:", line)
         if label:
-            function = label.group(1)
+            function_start, function = int(label.group(1), 16), label.group(2)
+            branched = False
             continue
         target = re.search(r"\t(?:call|jmp)l?\t0x([0-9a-f]+)", line)
         if target and bad_target(int(target.group(1), 16)):
             bad.append(f"{function}: {line.strip()}")
+        # (a function that calls or jumps to itself before any jump of its
+        # own never returns: a wrapper the compiler made call itself)
+        if target and not branched and int(target.group(1), 16) == function_start:
+            bad.append(f"{function} calls itself: {line.strip()}")
+        if re.search(r"\tj[a-z]+\t", line):
+            branched = True
     for line in bad[:20]:
         print(f"bad call: {line}")
     if bad:
-        print(f"{len(bad)} calls land outside the code")
+        print(f"{len(bad)} bad calls (port/win98/build.py: calls_checked)")
     return not bad
 
 

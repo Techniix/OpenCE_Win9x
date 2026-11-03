@@ -22,16 +22,29 @@ msvcrt.dll double maths is enough.
 
 /* ---------- C99 float maths */
 
-float sinf(float x) { return (float)sin(x); }
-float cosf(float x) { return (float)cos(x); }
-float tanf(float x) { return (float)tan(x); }
-float atanf(float x) { return (float)atan(x); }
-float atan2f(float y, float x) { return (float)atan2(y, x); }
-float sqrtf(float x) { return (float)sqrt(x); }
-float floorf(float x) { return (float)floor(x); }
-float ceilf(float x) { return (float)ceil(x); }
-double exp2(double x) { return pow(2.0, x); }
-double scalbn(double x, int n) { return ldexp(x, n); }
+/* (msvcrt.dll's, by their imports' names: clang knows (float)floor(x) as
+floorf(x), and would make floorf call itself, forever) */
+extern double msvcrt_sin(double) __asm__("_sin");
+extern double msvcrt_cos(double) __asm__("_cos");
+extern double msvcrt_tan(double) __asm__("_tan");
+extern double msvcrt_atan(double) __asm__("_atan");
+extern double msvcrt_atan2(double, double) __asm__("_atan2");
+extern double msvcrt_sqrt(double) __asm__("_sqrt");
+extern double msvcrt_floor(double) __asm__("_floor");
+extern double msvcrt_ceil(double) __asm__("_ceil");
+extern double msvcrt_pow(double, double) __asm__("_pow");
+extern double msvcrt_ldexp(double, int) __asm__("_ldexp");
+
+float sinf(float x) { return (float)msvcrt_sin(x); }
+float cosf(float x) { return (float)msvcrt_cos(x); }
+float tanf(float x) { return (float)msvcrt_tan(x); }
+float atanf(float x) { return (float)msvcrt_atan(x); }
+float atan2f(float y, float x) { return (float)msvcrt_atan2(y, x); }
+float sqrtf(float x) { return (float)msvcrt_sqrt(x); }
+float floorf(float x) { return (float)msvcrt_floor(x); }
+float ceilf(float x) { return (float)msvcrt_ceil(x); }
+double exp2(double x) { return msvcrt_pow(2.0, x); }
+double scalbn(double x, int n) { return msvcrt_ldexp(x, n); }
 
 /* (to the nearest, ties to even: the x87's rounding as the threads run it) */
 double rint(double x)
@@ -44,7 +57,10 @@ double rint(double x)
 
 float rintf(float x)
 {
-	return (float)rint(x);
+	float result;
+
+	__asm__("frndint" : "=t"(result) : "0"(x));
+	return result;
 }
 
 long lrintf(float x)
