@@ -151,9 +151,14 @@ int __ms_vsnprintf(char *buffer, size_t count, const char *format, va_list argum
 	return result;
 }
 
+/* (mingw-w64's stdlib.h makes strtod an inline call of this, which calling
+strtod here would call again, forever: msvcrt.dll's own, by its import's
+name) */
+extern double msvcrt_strtod(const char *string, char **end) __asm__("_strtod");
+
 double __strtod(const char *string, char **end)
 {
-	return strtod(string, end);
+	return msvcrt_strtod(string, end);
 }
 
 /* (ws2tcpip.h's, which ws2_32.dll of Windows 98 does not export: no IPv6) */
