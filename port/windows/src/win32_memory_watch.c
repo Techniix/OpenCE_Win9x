@@ -10,8 +10,13 @@ writable again.
 
 #include <windows.h>
 
-/* the Xbox memory window (port/linux/src/platform.h: the desktop builds') */
+/* the Xbox memory window (port/linux/src/platform.h: the desktop builds';
+HALO_PORT_WINDOW_BASE where a build moves it, port/linux/include/halo_port_capacity.h) */
+#ifdef HALO_PORT_WINDOW_BASE
+#define PLATFORM_CONTIGUOUS_BASE HALO_PORT_WINDOW_BASE
+#else
 #define PLATFORM_CONTIGUOUS_BASE 0x80000000UL
+#endif
 #define PLATFORM_CONTIGUOUS_SIZE 0x20000000UL
 
 #define WATCH_PAGE_SIZE 0x1000UL

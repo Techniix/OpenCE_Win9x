@@ -138,6 +138,7 @@ symbols in this file:
 #include "custom_edition_cache.h" /* port: port/linux/game/custom_edition_cache.c */
 #include "cache_file_formats.h" /* port: CUSTOM_EDITION_TAG_CACHE_BYTES */
 #include "map_share.h" /* port: port/linux/game/map_share.c */
+#include "tag_relocate.h" /* port: port/linux/game/tag_relocate.c */
 #ifdef HALO_ANDROID
 /* port: geometry the map holds and does not write, drawn on Android from
 GL buffers of its own (port/linux/src/d3d8_gl.c) */
@@ -281,6 +282,71 @@ static char const *data_00316820[] =
 };
 
 /* ---------- private code */
+
+/* port: a build whose memory window is not the Xbox's (HALO_PORT_WINDOW_BASE,
+the Windows 9x build) reads a map's tags and bsps where its tag cache is, not
+where they are linked to (0x803A6000), and moves their pointers by the
+difference before anything reads them (port/linux/game/tag_relocate.c).
+FALSE if they could not all be walked: the validator then refuses them. */
+#if HALO_PORT_WINDOW_RELOCATED
+static unsigned long cache_file_relocation_marks[0x01600000 / 32];
+
+static void cache_file_relocation_begin(
+	struct tag_relocation *relocation)
+{
+	csmemset(relocation, 0, sizeof(*relocation));
+	relocation->cache = physical_memory_get_tag_cache_base_address();
+	relocation->link_address = HALO_PORT_TAG_CACHE_LINK_ADDRESS;
+	relocation->size = 0x01600000;
+	relocation->delta = HALO_PORT_TAG_CACHE_BASE_ADDRESS - HALO_PORT_TAG_CACHE_LINK_ADDRESS;
+	relocation->marks = cache_file_relocation_marks;
+
+	return;
+}
+#endif
+
+static boolean cache_file_relocate_tags(
+	long tag_data_size)
+{
+#if HALO_PORT_WINDOW_RELOCATED
+	struct tag_relocation relocation;
+
+	cache_file_relocation_begin(&relocation);
+	csmemset(cache_file_relocation_marks, 0, sizeof(cache_file_relocation_marks));
+
+	return tag_relocate_tags(&relocation, tag_data_size);
+#else
+	(void)tag_data_size;
+
+	return TRUE;
+#endif
+}
+
+static boolean cache_file_relocate_structure_bsp(
+	void *base_address,
+	long size,
+	long tag_data_size)
+{
+#if HALO_PORT_WINDOW_RELOCATED
+	struct tag_relocation relocation;
+	unsigned long bsp_marks_offset = (unsigned long)tag_data_size / 8;
+
+	cache_file_relocation_begin(&relocation);
+	/* (a bsp's marks are its own: the last bsp's, where this one is now, are
+	cleared; the tags' stay) */
+	csmemset((byte *)cache_file_relocation_marks + bsp_marks_offset, 0,
+		sizeof(cache_file_relocation_marks) - bsp_marks_offset);
+
+	return tag_relocate_structure_bsp(&relocation,
+		(unsigned long)base_address - relocation.delta, size);
+#else
+	(void)base_address;
+	(void)size;
+	(void)tag_data_size;
+
+	return TRUE;
+#endif
+}
 
 static struct cache_file_tag_instance *cache_get_tag_instance(
 	long tag_index)
@@ -732,7 +798,9 @@ long tag_loaded(
 void cache_files_enable_writes(
 	void)
 {
-	XPhysicalProtect((void *)0x803A6000, 0x01600000, PAGE_READWRITE);
+	/* port: the tag cache wherever the build's memory window puts it
+	(0x803A6000 on the Xbox) */
+	XPhysicalProtect(physical_memory_get_tag_cache_base_address(), 0x01600000, PAGE_READWRITE);
 
 	return;
 }
@@ -740,7 +808,7 @@ void cache_files_enable_writes(
 void cache_files_disable_writes(
 	void)
 {
-	XPhysicalProtect((void *)0x803A6000, 0x01600000, PAGE_READONLY);
+	XPhysicalProtect(physical_memory_get_tag_cache_base_address(), 0x01600000, PAGE_READONLY);
 	XPhysicalProtect(
 		cache_file_globals.tag_header->vertex_buffers,
 		cache_file_globals.tag_header->vertex_buffer_count * 12,
@@ -1285,6 +1353,10 @@ long scenario_tags_load(
 
 				return NONE;
 			}
+			/* port: moved to where this build's tag cache is, if that is not
+			where the map is linked to */
+			if (!cache_file_relocate_tags(cache_file_globals.header.tag_data_size))
+				error(_error_silent, "the cache file '%s': its tags could not all be relocated", scenario_name);
 			if (!cache_file_tag_header_verify(
 				tag_cache_base_address,
 				cache_file_globals.header.tag_data_size,
@@ -1441,6 +1513,15 @@ boolean scenario_structure_bsp_load(
 			{
 				sound_idle();
 			}
+		}
+
+		/* port: a Xbox map's bsp moved, as its tags were, to where this
+		build's tag cache is (a Custom Edition map's is where its tags are) */
+		if (read_complete == TRUE && !custom_edition_cache_tags_loaded() &&
+			!cache_file_relocate_structure_bsp(reference->base_address, reference->file_size,
+				cache_file_globals.header.tag_data_size))
+		{
+			error(_error_silent, "a structure bsp could not all be relocated");
 		}
 
 		/* port: a bsp that did not all read, or whose header's pointers

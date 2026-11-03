@@ -145,9 +145,10 @@ const char *platform_save_root(void);
 
 The Xbox maps physical memory at virtual 0x80000000 + P. The layer reserves
 that window at start-up and hands out page-granular blocks from it, so the
-physical/virtual arithmetic the game and Direct3D rely on keeps working. */
+physical/virtual arithmetic the game and Direct3D rely on keeps working. A
+build may move the window (HALO_PORT_WINDOW_BASE, halo_port_capacity.h). */
 
-#define PLATFORM_CONTIGUOUS_BASE 0x80000000UL
+#define PLATFORM_CONTIGUOUS_BASE HALO_PORT_WINDOW_BASE
 #if defined(HALO_ARM64_GUEST) || defined(HALO_WEB)
 /* 128 MB, a development kit's: Android's guest image is linked just above
 the window (port/android/include/halo_android_abi.h), and the web build's
@@ -161,6 +162,9 @@ same size. */
 #define PLATFORM_CONTIGUOUS_SIZE 0x20000000UL
 #endif
 #define PLATFORM_ANY_PHYSICAL_ADDRESS 0xffffffffUL
+/* (physical addresses are or'ed onto the base) */
+typedef char verify_platform_contiguous_base_aligned[
+	(PLATFORM_CONTIGUOUS_BASE & (PLATFORM_CONTIGUOUS_SIZE - 1)) == 0 ? 1 : -1];
 
 /* returns NULL on failure; physical_address places the block exactly */
 void *platform_contiguous_alloc(unsigned long size, unsigned long alignment,

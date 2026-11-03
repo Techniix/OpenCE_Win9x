@@ -63,6 +63,14 @@ parser.add_argument(
     "pkgconf and wayland-scanner, not the 32-bit SDL 3",
 )
 parser.add_argument(
+    "--window-base",
+    metavar="ADDRESS",
+    help="the Linux and Windows builds' Xbox memory window at this address (0x20000000 or 0x60000000) "
+    "rather than the Xbox's 0x80000000, and each map's tags moved there as it loads "
+    "(port/linux/game/tag_relocate.c): how the Windows 9x build must run, to try on these builds; their "
+    "saved games are not the default builds'",
+)
+parser.add_argument(
     "--pgo",
     nargs="?",
     const="train",
@@ -139,6 +147,7 @@ sln = SimpleNamespace(
     compiler_launcher=args.compiler_launcher,
     port_release=args.release,
     port_profile=args.profile,
+    port_window_base=args.window_base,
     port_lto=args.lto,
     port_portable=args.portable,
     port_pgo=args.pgo,

@@ -181,9 +181,24 @@ def configuration_defines(sln: Any) -> List[str]:
     defines = []
     if getattr(sln, "port_release", False):
         defines.append("-DHALO_RELEASE")
+
     if getattr(sln, "port_profile", False):
         defines.append("-DHALO_PROFILE")
     return defines
+
+
+def window_base_defines(sln: Any) -> List[str]:
+    """configure.py --window-base for the Linux and Windows builds: their
+    memory window moved (port/linux/include/halo_port_capacity.h). It is a
+    multiple of their window's size (512 MB), and not 0x40000000, whose window
+    would hold the Custom Edition tag cache's (0x40440000)."""
+    window_base = getattr(sln, "port_window_base", None)
+    if not window_base:
+        return []
+    base = int(window_base, 16)
+    if base not in (0x20000000, 0x60000000):
+        raise ValueError(f"--window-base {window_base}: 0x20000000 or 0x60000000")
+    return [f"-DHALO_PORT_WINDOW_BASE=0x{base:08X}UL"]
 
 
 def check_profile_options(profile: bool, pgo: str) -> None:
@@ -533,7 +548,7 @@ def generate_linux_build(n: Writer, sln: Any) -> None:
     # (a debug build checks its stack frames, and stops at the first one
     # overrun, as it stops at the first failed assertion; a release build
     # does not, so that an overrun nobody has met cannot end a game)
-    abi = " ".join(LINUX_ABI_FLAGS + target + configuration_defines(sln)
+    abi = " ".join(LINUX_ABI_FLAGS + target + configuration_defines(sln) + window_base_defines(sln)
                    + ([] if getattr(sln, "port_release", False) else ["-fstack-protector-strong"]))
     port_include = PORT_DIR / "include"
     sdk_flags = f"-idirafter {XDK_INCLUDE}"
