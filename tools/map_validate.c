@@ -36,7 +36,11 @@ With --relocation, each Xbox map is instead read and checked twice: where
 it is linked, and at another address with its tags relocated
 (port/linux/game/tag_relocate.c), as the Windows 9x build must run it. The
 two must be the same but for the pointers moved, and no pointer into the tag
-cache may be left unmoved; each difference and each such pointer is printed.
+cache may be left unmoved where the game reads it: the relocated tags must
+need no other corrections than the linked ones. Each difference is printed,
+and, as notes, words in tags' structures that still point into the tag
+cache: pointers the game never reads, which the schemas leave out (the
+editor's data in a scenario), or data that looks like an address.
 
 usage: map_validate [--strict] [--quiet] [--maps folder] [--fuzz iterations [--seed n] [--log file]]
 	[--relocation] map.map...
@@ -396,6 +400,8 @@ enum
 
 /* where the bsp being compared starts in the tag cache (0: the tags) */
 static unsigned long relocation_bsp_offset;
+/* words left pointing into the tag cache (notes, not problems) */
+static long relocation_notes;
 
 struct relocation_snapshot
 {
@@ -499,11 +505,11 @@ static long relocation_compare(struct relocation_snapshot const *snapshot, unsig
 				!tag_relocate_marked(relocation, offset + 1) && !tag_relocate_marked(relocation, offset + 2) &&
 				!tag_relocate_marked(relocation, offset + 3))
 			{
-				if (problems++ < MAXIMUM_RELOCATION_REPORTS)
+				if (relocation_notes++ < MAXIMUM_RELOCATION_REPORTS)
 				{
 					relocation_where(linked_cache, TAG_CACHE_BASE_ADDRESS, offset, where, sizeof(where));
-					printf("%s: %s: %08lx at %08lx points into the tag cache and was not moved (%s)\n", name, what,
-						a, TAG_CACHE_BASE_ADDRESS + offset, where);
+					printf("%s: %s: note: %08lx at %08lx looks like an address in the tag cache, not moved (%s)\n",
+						name, what, a, TAG_CACHE_BASE_ADDRESS + offset, where);
 				}
 			}
 		}
@@ -530,9 +536,11 @@ static int map_relocation_check(char const *path, unsigned char *tag_cache, unsi
 	long index;
 	long moved = 0;
 	long problems = 0;
+	long corrections[2] = { 0, 0 };
 	int pass;
 
 	memset(snapshots, 0, sizeof(snapshots));
+	relocation_notes = 0;
 	if (!bytes || header.tag_data_offset < 0 || header.tag_data_size <= 0 || header.tag_data_size > TAG_CACHE_SIZE ||
 		header.tag_data_offset > header.file_length - header.tag_data_size)
 	{
@@ -634,12 +642,21 @@ static int map_relocation_check(char const *path, unsigned char *tag_cache, unsi
 				problems += relocation_compare(snapshot, cache + load, &relocation, tag_cache, name, what);
 			}
 		}
+		corrections[pass] = tag_validate_corrections();
+	}
+	/* (the corrections a map needs where it is linked, and no more where it
+	is relocated: one more is a pointer the validator found unmoved) */
+	if (corrections[1] != corrections[0])
+	{
+		printf("%s: %ld corrections relocated, %ld where linked\n", name, corrections[1], corrections[0]);
+		problems++;
 	}
 
 	for (index = 0; index <= MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO; index++)
 		free(snapshots[index].bytes);
 	free(bytes);
-	printf("%s: relocated: %ld pointers moved, %ld bsps, %ld problems\n", name, moved, bsp_count, problems);
+	printf("%s: relocated: %ld pointers moved, %ld bsps, %ld problems, %ld notes\n", name, moved, bsp_count, problems,
+		relocation_notes);
 
 	return problems != 0;
 }
