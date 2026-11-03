@@ -13,8 +13,8 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). `probe/results/` has its reports. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
 | Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
-| Compiling and linking (`build.py`, `include/`, `src/`, `runtime/`) | All 900 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers, and link into build/win98/halo.exe: the game through hybrid precision, the Windows build's platform layer, the third-party libraries, and what Windows 9x lacks (below). Not yet run on Windows 98: the first runs are below. |
-| SDL 3 | `port/retro_sdl`: the SDL 3 functions the platform layer calls, on Win32 (Windows 95 and later). Not yet run. |
+| Compiling and linking (`build.py`, `include/`, `src/`, `runtime/`) | All 900 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers, and link into build/win98/halo.exe: the game through hybrid precision, the Windows build's platform layer, the third-party libraries, and what Windows 9x lacks (below). Runs on Windows 98 SE (86Box: VIA Cyrix III, 128 MB) without drawing: loads ui.map and the main menu, plays its music to no device, and quits on time (first runs, below). |
+| SDL 3 | `port/retro_sdl`: the SDL 3 functions the platform layer calls, on Win32 (Windows 95 and later). Its time, threads, files and events run; its window, OpenGL and sound not yet. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
 
 ## Maths: hybrid precision
