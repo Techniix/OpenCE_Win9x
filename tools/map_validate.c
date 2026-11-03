@@ -32,7 +32,14 @@ Vorbis sounds and converts its scripts and geometry, from tags the validator
 passed: not here.) Resource maps given as maps are passed over; OpenSauce
 maps are refused, as the game refuses them.
 
-usage: map_validate [--strict] [--quiet] [--maps folder] [--fuzz iterations [--seed n] [--log file]] map.map...
+With --relocation, each Xbox map is instead read and checked twice: where
+it is linked, and at another address with its tags relocated
+(port/linux/game/tag_relocate.c), as the Windows 9x build must run it. The
+two must be the same but for the pointers moved, and no pointer into the tag
+cache may be left unmoved; each difference and each such pointer is printed.
+
+usage: map_validate [--strict] [--quiet] [--maps folder] [--fuzz iterations [--seed n] [--log file]]
+	[--relocation] map.map...
 */
 
 #include <stdarg.h>
@@ -54,6 +61,9 @@ enum
 	for (physical_memory_map.c, physical_memory_map.h) */
 	TAG_CACHE_BASE_ADDRESS = 0x803A6000,
 	TAG_CACHE_SIZE = 0x1600000,
+	/* where --relocation reads them instead: in the private arena, as on
+	Windows 9x, with the same offset in a 256 MB window */
+	RELOCATED_TAG_CACHE_ADDRESS = 0x503A6000,
 
 	CACHE_FILE_HEADER_SIZE = 0x800,
 	CACHE_FILE_HEADER_SIGNATURE = 'head',
@@ -127,6 +137,21 @@ typedef char verify_scenario_structure_bsp_reference_size[
 /* ---------- the validator's (port/linux/game/tag_validate.c) */
 
 unsigned char tag_validate_tags(void *tag_header, long tag_data_size, long file_length, char const *map_name);
+
+/* the relocation's (port/linux/game/tag_relocate.h) */
+struct tag_relocation
+{
+	unsigned char *cache;
+	unsigned long link_address;
+	unsigned long size;
+	unsigned long delta;
+	unsigned long *marks;
+	long moved;
+	unsigned char failed;
+};
+unsigned char tag_relocate_tags(struct tag_relocation *relocation, long tag_data_size);
+unsigned char tag_relocate_structure_bsp(struct tag_relocation *relocation, unsigned long link_address, long size);
+unsigned char tag_relocate_marked(struct tag_relocation const *relocation, unsigned long offset);
 unsigned char tag_validate_structure_bsp(long tag_index, void *base, long size);
 long tag_validate_corrections(void);
 unsigned char tag_validate_claimed(void const *address);
@@ -358,6 +383,245 @@ static int map_validate(char const *path, unsigned char *tag_cache, long *correc
 	free(bytes);
 
 	return refused;
+}
+
+/* ---------- relocation */
+
+enum
+{
+	MAXIMUM_RELOCATION_REPORTS = 12,
+};
+
+struct relocation_snapshot
+{
+	unsigned char *bytes;
+	unsigned long offset;
+	unsigned long size;
+};
+
+/* the tag (of the tags at tag_cache) whose root is nearest below offset, to
+say roughly where something is */
+static void relocation_where(unsigned char const *tag_cache, unsigned long link, unsigned long offset,
+	char *text, size_t text_size)
+{
+	struct tag_header const *tags = (struct tag_header const *)tag_cache;
+	struct tag_instance const *instances;
+	unsigned long best = 0;
+	long best_index = -1;
+	long index;
+
+	snprintf(text, text_size, "?");
+	instances = (struct tag_instance const *)(tag_cache + ((unsigned long)tags->instances - link));
+	for (index = 0; index < tags->tag_count; index++)
+	{
+		unsigned long root = (unsigned long)instances[index].base_address - link;
+
+		if (instances[index].base_address && root <= offset && root >= best)
+		{
+			best = root;
+			best_index = index;
+		}
+	}
+	if (best_index >= 0)
+	{
+		unsigned long group = instances[best_index].group_tag;
+		unsigned long name = (unsigned long)instances[best_index].name - link;
+
+		snprintf(text, text_size, "%c%c%c%c %s +%lx", (int)(group >> 24), (int)(group >> 16 & 0xFF),
+			(int)(group >> 8 & 0xFF), (int)(group & 0xFF),
+			name < TAG_CACHE_SIZE ? (char const *)tag_cache + name : "?", offset - best);
+	}
+}
+
+/* the relocated bytes (relocated, at the snapshot's offset of the tag cache)
+against the snapshot of the bytes checked where they are linked: the same
+but for the pointers moved (moved by delta, or the same where the validator
+replaced them), and no unmoved word pointing into the tag cache */
+static long relocation_compare(struct relocation_snapshot const *snapshot, unsigned char const *relocated,
+	struct tag_relocation const *relocation, unsigned char const *linked_cache, char const *name, char const *what)
+{
+	unsigned long index = 0;
+	long problems = 0;
+	char where[128];
+
+	while (index < snapshot->size)
+	{
+		unsigned long offset = snapshot->offset + index;
+
+		if (tag_relocate_marked(relocation, offset) && snapshot->size - index >= 4)
+		{
+			unsigned long a, b;
+
+			memcpy(&a, snapshot->bytes + index, 4);
+			memcpy(&b, relocated + index, 4);
+			if (b != a && b != a + relocation->delta)
+			{
+				if (problems++ < MAXIMUM_RELOCATION_REPORTS)
+				{
+					relocation_where(linked_cache, TAG_CACHE_BASE_ADDRESS, offset, where, sizeof(where));
+					printf("%s: %s: a pointer moved is %08lx, %08lx where linked (%08lx; %s)\n", name, what, b, a,
+						TAG_CACHE_BASE_ADDRESS + offset, where);
+				}
+			}
+			index += 4;
+			continue;
+		}
+		if (snapshot->bytes[index] != relocated[index])
+		{
+			if (problems++ < MAXIMUM_RELOCATION_REPORTS)
+			{
+				relocation_where(linked_cache, TAG_CACHE_BASE_ADDRESS, offset, where, sizeof(where));
+				printf("%s: %s: byte at %08lx differs (%02x, %02x where linked; %s)\n", name, what,
+					TAG_CACHE_BASE_ADDRESS + offset, relocated[index], snapshot->bytes[index], where);
+			}
+		}
+		if ((offset & 3) == 0 && snapshot->size - index >= 4)
+		{
+			unsigned long a;
+
+			memcpy(&a, snapshot->bytes + index, 4);
+			if (a - TAG_CACHE_BASE_ADDRESS < TAG_CACHE_SIZE &&
+				!tag_relocate_marked(relocation, offset + 1) && !tag_relocate_marked(relocation, offset + 2) &&
+				!tag_relocate_marked(relocation, offset + 3))
+			{
+				if (problems++ < MAXIMUM_RELOCATION_REPORTS)
+				{
+					relocation_where(linked_cache, TAG_CACHE_BASE_ADDRESS, offset, where, sizeof(where));
+					printf("%s: %s: %08lx at %08lx points into the tag cache and was not moved (%s)\n", name, what,
+						a, TAG_CACHE_BASE_ADDRESS + offset, where);
+				}
+			}
+		}
+		index++;
+	}
+
+	return problems;
+}
+
+/* the map's tags and bsps, checked where linked (in tag_cache) then
+relocated (in relocated_cache): 0 if the two agree */
+static int map_relocation_check(char const *path, unsigned char *tag_cache, unsigned char *relocated_cache)
+{
+	static unsigned long marks[TAG_CACHE_SIZE / 32];
+	struct relocation_snapshot snapshots[1 + MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO];
+	struct cache_file_header header;
+	struct tag_relocation relocation;
+	unsigned char *bytes = map_read(path, &header);
+	char const *name = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
+	struct tag_header *tags;
+	struct tag_block *bsps;
+	long bsp_count = 0;
+	long index;
+	long moved = 0;
+	long problems = 0;
+	int pass;
+
+	memset(snapshots, 0, sizeof(snapshots));
+	if (!bytes || header.tag_data_offset < 0 || header.tag_data_size <= 0 || header.tag_data_size > TAG_CACHE_SIZE ||
+		header.tag_data_offset > header.file_length - header.tag_data_size)
+	{
+		printf("%s: cannot be read\n", name);
+		free(bytes);
+		return 1;
+	}
+
+	/* where linked (pass 0), then relocated (pass 1) */
+	for (pass = 0; pass < 2; pass++)
+	{
+		unsigned char *cache = pass ? relocated_cache : tag_cache;
+
+		memset(&relocation, 0, sizeof(relocation));
+		relocation.cache = cache;
+		relocation.link_address = TAG_CACHE_BASE_ADDRESS;
+		relocation.size = TAG_CACHE_SIZE;
+		relocation.delta = (unsigned long)cache - TAG_CACHE_BASE_ADDRESS;
+		relocation.marks = marks;
+		memset(marks, 0, sizeof(marks));
+
+		memset(cache, 0xCD, TAG_CACHE_SIZE);
+		memcpy(cache, bytes + header.tag_data_offset, header.tag_data_size);
+		if (pass && !tag_relocate_tags(&relocation, header.tag_data_size))
+			printf("%s: its tags could not all be walked to relocate them\n", name);
+		moved += relocation.moved;
+		if (!tag_validate_tags(cache, header.tag_data_size, header.file_length, name))
+		{
+			printf("%s: refused %s\n", name, pass ? "relocated" : "where linked");
+			problems++;
+			break;
+		}
+		if (!pass)
+		{
+			snapshots[0].bytes = malloc(header.tag_data_size);
+			snapshots[0].size = header.tag_data_size;
+			memcpy(snapshots[0].bytes, cache, header.tag_data_size);
+		}
+		else
+		{
+			problems += relocation_compare(&snapshots[0], cache, &relocation, tag_cache, name, "tags");
+		}
+
+		tags = (struct tag_header *)cache;
+		{
+			short scenario_index = (short)tags->scenario_tag_index;
+			struct tag_instance *scenario = &tags->instances[scenario_index];
+
+			bsps = (struct tag_block *)((unsigned char *)scenario->base_address + SCENARIO_STRUCTURE_BSPS_OFFSET);
+			bsp_count = bsps->count < MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO ? bsps->count : MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO;
+		}
+		for (index = 0; index < bsp_count; index++)
+		{
+			struct scenario_structure_bsp_reference *reference =
+				(struct scenario_structure_bsp_reference *)bsps->address + index;
+			unsigned long load = (unsigned long)reference->base_address - (unsigned long)cache;
+			struct relocation_snapshot *snapshot = &snapshots[1 + index];
+			char what[32];
+
+			if (reference->file_offset < 0 || reference->file_size <= 0 ||
+				reference->file_offset > header.file_length - reference->file_size ||
+				load < (unsigned long)header.tag_data_size || load >= TAG_CACHE_SIZE ||
+				(unsigned long)reference->file_size > TAG_CACHE_SIZE - load)
+			{
+				printf("%s: structure bsp %ld is outside the tag cache %s\n", name, index,
+					pass ? "relocated" : "where linked");
+				problems++;
+				continue;
+			}
+			/* (a bsp's marks are its own: the last one's are cleared) */
+			memset((unsigned char *)marks + header.tag_data_size / 8, 0,
+				sizeof(marks) - header.tag_data_size / 8);
+			relocation.moved = 0;
+			memset(cache + header.tag_data_size, 0xCD, TAG_CACHE_SIZE - header.tag_data_size);
+			memcpy(cache + load, bytes + reference->file_offset, reference->file_size);
+			if (pass && !tag_relocate_structure_bsp(&relocation, TAG_CACHE_BASE_ADDRESS + load, reference->file_size))
+				printf("%s: structure bsp %ld could not all be walked to relocate it\n", name, index);
+			moved += relocation.moved;
+			if (!tag_validate_structure_bsp(reference->tag_index, cache + load, reference->file_size))
+			{
+				printf("%s: structure bsp %ld refused %s\n", name, index, pass ? "relocated" : "where linked");
+				problems++;
+				continue;
+			}
+			snprintf(what, sizeof(what), "structure bsp %ld", index);
+			if (!pass)
+			{
+				snapshot->bytes = malloc(reference->file_size);
+				snapshot->offset = load;
+				snapshot->size = reference->file_size;
+				memcpy(snapshot->bytes, cache + load, reference->file_size);
+			}
+			else if (snapshot->bytes)
+			{
+				problems += relocation_compare(snapshot, cache + load, &relocation, tag_cache, name, what);
+			}
+		}
+	}
+
+	for (index = 0; index <= MAXIMUM_STRUCTURE_BSPS_PER_SCENARIO; index++)
+		free(snapshots[index].bytes);
+	free(bytes);
+	printf("%s: relocated: %ld pointers moved, %ld bsps, %ld problems\n", name, moved, bsp_count, problems);
+
+	return problems != 0;
 }
 
 /* ---------- fuzzing */
@@ -948,6 +1212,8 @@ int main(int argc, char **argv)
 {
 	unsigned char *tag_cache;
 	unsigned char *custom_edition_tag_cache;
+	unsigned char *relocated_cache = NULL;
+	int relocation = 0;
 	int strict = 0;
 	int failed = 0;
 	long fuzz_iterations = 0;
@@ -976,6 +1242,19 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[argument], "--strict"))
 		{
 			strict = 1;
+			continue;
+		}
+		if (!strcmp(argv[argument], "--relocation"))
+		{
+			relocation = 1;
+			relocated_cache = mmap((void *)RELOCATED_TAG_CACHE_ADDRESS, TAG_CACHE_SIZE, PROT_READ | PROT_WRITE,
+				MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+			if (relocated_cache != (unsigned char *)RELOCATED_TAG_CACHE_ADDRESS)
+			{
+				fprintf(stderr, "map_validate: the relocated tag cache's address (%08x) is taken\n",
+					RELOCATED_TAG_CACHE_ADDRESS);
+				return 2;
+			}
 			continue;
 		}
 		if (!strcmp(argv[argument], "--quiet"))
@@ -1031,6 +1310,13 @@ int main(int argc, char **argv)
 			continue;
 		default:
 			break;
+		}
+		if (relocation)
+		{
+			if (map_relocation_check(argv[argument], tag_cache, relocated_cache))
+				failed = 1;
+			fflush(stdout);
+			continue;
 		}
 		if (fuzz_iterations)
 		{
