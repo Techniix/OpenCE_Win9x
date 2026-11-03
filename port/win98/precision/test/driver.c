@@ -80,12 +80,12 @@ void driver_main(void)
 }
 
 #ifdef X87
-unsigned short x87_pc24 = X87_START_CW;
+static unsigned short x87_start_cw = X87_START_CW;
 #endif
 void c_start(void)
 {
 #ifdef X87
-	__asm__ volatile("fninit; fldcw %0" : : "m"(x87_pc24));
+	__asm__ volatile("fninit; fldcw %0" : : "m"(x87_start_cw));
 #endif
 	driver_main();
 	__asm__ volatile("int $0x80" : : "a"(1), "b"(0));

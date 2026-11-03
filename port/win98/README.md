@@ -13,8 +13,7 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). `probe/results/` has its reports. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
 | Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
-| Game units (`build_game.py`, `include/`) | All 511 compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's C runtime headers, through hybrid precision. Not linked yet. |
-| Platform layer, link against msvcrt.dll | Not started. |
+| Compiling (`build.py`, `include/`, `src/`) | All 886 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers: the game through hybrid precision, the Windows build's platform layer, the third-party libraries. Not linked yet: what the link lacks is below. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
 | Win32 replacement for SDL3 | Not started. |
 
@@ -111,3 +110,43 @@ beavercreek, sidewinder and damnation, each build hosting in turn: 8 of 8
 games in step, positions apart by 0.04-0.06 world units on average and the
 mismatched seconds (grenades, rounds) within the netcode's round trip, as
 between identical builds (port/linux/NETCODE.md, "Comparing two builds").
+
+## Building
+
+    python3 configure.py --window-base 0x20000000   # the game's flags, its window moved
+    python3 port/win98/build.py                      # build/win98/obj, build/win98/undefined.txt
+
+The game's units are compiled as the Linux build's (`halo_win9x_prefix.h`),
+the platform layer as the Windows build's (`halo_win9x_platform_prefix.h`),
+both on mingw-w64's headers, which `build.py` clones into
+build/win98/third_party with SDL 3's headers the first time.
+What Windows 98 lacks that the platform layer calls is defined under the
+same names in `src/win9x_compat.c` (condition variables on a semaphore,
+`rand_s` on CryptoAPI, `localtime_r`), so the shared sources stay as they
+are; `src/win9x_precision.c` keeps the x87 in single precision when the game
+resets it; `src/win9x_linux_crt.c` gives the game's units the C runtime under
+the Linux build's names.
+
+## What the link still lacks
+
+`build/win98/undefined.txt` lists it (473 symbols):
+
+- **SDL 3** (146 functions): an SDL-compatible layer of its own, with a
+  backend per system (Win32 first; Mac OS 9 and DOS can add theirs), in place
+  of SDL, which does not run on Windows 9x.
+- **Windows functions** (about 190, imported): most are in Windows 98's
+  DLLs. The rest go in `win9x_compat.c`: the wide-character file functions
+  (stubs on Windows 9x: to the ANSI ones), WinHTTP (on mbedTLS, for the
+  master servers' HTTPS), `getaddrinfo` and `getnameinfo` (on
+  `gethostbyname`), `AddVectoredExceptionHandler` (on
+  `SetUnhandledExceptionFilter`), `GetFileSizeEx`, `SetFilePointerEx`,
+  `GlobalMemoryStatusEx`, `MoveFileExA`, `GetAdaptersAddresses` (on
+  `GetAdaptersInfo`), `BCryptGenRandom` (on CryptoAPI), and the security
+  and console functions, which can do nothing.
+- **The C runtime** (about 140): msvcrt.dll's, by an import library made
+  from mingw-w64's definitions, and `_time32`, `_localtime32` and the other
+  functions newer than Windows 98's msvcrt.dll.
+- **A runtime of the build's own**: the start-up (`__main`, static
+  constructors, `x87_precision_single` before anything runs), thread-local
+  storage (`_tls_index`), and the compiler's 64-bit division (`__divdi3`
+  and the like).
