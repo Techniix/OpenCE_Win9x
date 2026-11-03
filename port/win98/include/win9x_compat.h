@@ -26,4 +26,8 @@ BOOL WINAPI GetNamedPipeServerProcessId(HANDLE pipe, PULONG process_id);
 /* (Windows 7, psapi's on Windows 2000 and XP) a process's memory: FALSE */
 BOOL WINAPI K32GetProcessMemoryInfo(HANDLE process, PPROCESS_MEMORY_COUNTERS counters, DWORD size);
 
+/* bytes that cannot be guessed: CryptoAPI's, or the machine's timing
+(win9x_compat.c) */
+void win9x_random_bytes(void *buffer, unsigned long size);
+
 #endif

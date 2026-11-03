@@ -162,21 +162,120 @@ struct tm *localtime_r(const time_t *time, struct tm *result)
 	return result;
 }
 
+/* ---------- random bytes that cannot be guessed (the player's keys,
+p2p.c; Mbed TLS's entropy; expat's hash salt)
+
+CryptoAPI's, which Windows 98 has (and Windows 95 with Internet Explorer 3
+or later): without CRYPT_SILENT, which is Windows 2000's, and which Windows
+98 refuses as a flag it does not know. Where there is no CryptoAPI, the
+timing of the machine itself: the time stamp counter's low bits as the
+processor runs, read thousands of times between other clocks, and the
+state of the system, put through SHA-256, as the bytes and the next
+state. */
+
+#include "mbedtls/sha256.h"
+
+static int crypto_api_bytes(void *buffer, unsigned long size)
+{
+	static HCRYPTPROV provider;
+	static LONG unavailable;
+
+	if (unavailable)
+		return 0;
+	if (!provider &&
+		!CryptAcquireContextA(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) &&
+		!CryptAcquireContextA(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
+	{
+		unavailable = 1;
+		return 0;
+	}
+	return CryptGenRandom(provider, size, (BYTE *)buffer) != 0;
+}
+
+static unsigned long long time_stamp(void)
+{
+	unsigned long long value;
+
+	__asm__ volatile("rdtsc" : "=A"(value));
+	return value;
+}
+
+static void timing_bytes(void *buffer, unsigned long size)
+{
+	static unsigned char state[32];
+	static CRITICAL_SECTION lock;
+	static LONG lock_state;
+	unsigned char *out = (unsigned char *)buffer;
+
+	if (InterlockedCompareExchange(&lock_state, 1, 0) == 0)
+	{
+		InitializeCriticalSection(&lock);
+		InterlockedExchange(&lock_state, 2);
+	}
+	while (lock_state != 2)
+		Sleep(0);
+	EnterCriticalSection(&lock);
+	while (size)
+	{
+		struct
+		{
+			unsigned char state[32];
+			unsigned long long stamps[256];
+			LARGE_INTEGER counter;
+			DWORD tick, process, thread;
+			MEMORYSTATUS memory;
+			POINT cursor;
+			void *stack;
+		} input;
+		unsigned char digest[32];
+		unsigned long index, take;
+
+		memcpy(input.state, state, sizeof(state));
+		/* (each stamp after a short wait for the tick to move: the jitter
+		between the two clocks is what cannot be known from outside) */
+		for (index = 0; index < 256; index++)
+		{
+			DWORD tick = GetTickCount();
+			unsigned long spins = 0;
+
+			while (GetTickCount() == tick && spins < 20000)
+				spins++;
+			input.stamps[index] = time_stamp() ^ ((unsigned long long)spins << 40);
+			if (index % 64 == 63)
+				Sleep(0);
+		}
+		QueryPerformanceCounter(&input.counter);
+		input.tick = GetTickCount();
+		input.process = GetCurrentProcessId();
+		input.thread = GetCurrentThreadId();
+		input.memory.dwLength = sizeof(input.memory);
+		GlobalMemoryStatus(&input.memory);
+		GetCursorPos(&input.cursor);
+		input.stack = &input;
+		mbedtls_sha256((const unsigned char *)&input, sizeof(input), digest, 0);
+		/* (the next state from the digest, never the bytes given out) */
+		mbedtls_sha256(digest, sizeof(digest), state, 0);
+		take = size < 16 ? size : 16;
+		memcpy(out, digest, take);
+		out += take;
+		size -= take;
+	}
+	LeaveCriticalSection(&lock);
+}
+
+void win9x_random_bytes(void *buffer, unsigned long size)
+{
+	if (!crypto_api_bytes(buffer, size))
+		timing_bytes(buffer, size);
+}
+
 /* rand_s (Windows XP's msvcrt) on CryptoAPI, which Windows 98 has (Internet
 Explorer's): expat's hash salt (port/third_party/expat/random_rand_s.c) */
 errno_t rand_s(unsigned int *value)
 {
-	static HCRYPTPROV provider;
-
 	if (!value)
 		return EINVAL;
-	if (!provider &&
-		!CryptAcquireContextA(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
-	{
-		return EINVAL;
-	}
-	if (!CryptGenRandom(provider, sizeof(*value), (BYTE *)value))
-		return EINVAL;
+	win9x_random_bytes(value, sizeof(*value));
 	return 0;
 }
 
@@ -477,16 +576,10 @@ BOOL WINAPI MiniDumpWriteDump(HANDLE process, DWORD process_id, HANDLE file, int
 /* (BCrypt, Mbed TLS's entropy: CryptoAPI's, as rand_s) */
 LONG WINAPI BCryptGenRandom(PVOID algorithm, PUCHAR buffer, ULONG size, ULONG flags)
 {
-	static HCRYPTPROV provider;
-
 	(void)algorithm;
 	(void)flags;
-	if (!provider &&
-		!CryptAcquireContextA(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
-	{
-		return (LONG)0xC0000001;
-	}
-	return CryptGenRandom(provider, size, buffer) ? 0 : (LONG)0xC0000001;
+	win9x_random_bytes(buffer, size);
+	return 0;
 }
 
 /* (WinHTTP: the updater's and the crash reporter's uploads, which Windows
