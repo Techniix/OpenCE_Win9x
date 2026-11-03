@@ -45,10 +45,18 @@ static void trace_write(const char *text)
 
 void win9x_trace(const char *stage)
 {
-	char line[256];
+	char prefix[32];
 
-	wsprintfA(line, "%lu ms: %s", GetTickCount() - started, stage);
-	trace_write(line);
+	/* (the stage written as it is, after its time: a watch line runs to
+	some 340 characters) */
+	wsprintfA(prefix, "%lu ms: ", GetTickCount() - started);
+	if (trace_file != INVALID_HANDLE_VALUE)
+	{
+		DWORD written;
+
+		WriteFile(trace_file, prefix, (DWORD)lstrlenA(prefix), &written, NULL);
+	}
+	trace_write(stage);
 }
 
 static void code_range(void)
