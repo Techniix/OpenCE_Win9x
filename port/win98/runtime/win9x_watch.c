@@ -31,6 +31,13 @@ static DWORD code_start, code_end;
 Windows 9x, VirtualQuery takes a lock in the system that a stopped thread
 may hold, and both then wait forever) */
 static DWORD stack_top;
+/* the committed part of that stack, which only grows: no page below it is
+read (one that is not yet committed, or its guard page, would fault) */
+static volatile DWORD stack_low;
+/* the flat stack segment: a thread in a 16-bit part of Windows 9x (USER
+and GDI thunk down to theirs) has another, its ESP an offset in that one,
+not an address */
+static DWORD flat_stack_segment;
 static DWORD started;
 
 static void trace_write(const char *text)
@@ -102,7 +109,8 @@ static DWORD WINAPI watch_thread(LPVOID parameter)
 			return 0;
 		context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
 		have_context = GetThreadContext(main_thread, &context);
-		if (have_context && context.Esp < stack_top && stack_top - context.Esp < 0x1000000)
+		if (have_context && context.SegSs == flat_stack_segment && context.Esp >= stack_low &&
+			context.Esp < stack_top)
 		{
 			words = (stack_top - context.Esp) / 4;
 			if (words > WATCH_STACK_WORDS)
@@ -111,6 +119,19 @@ static DWORD WINAPI watch_thread(LPVOID parameter)
 		}
 		ResumeThread(main_thread);
 
+		/* (the stack's committed part found again while the thread runs,
+		for the next time: it may have grown) */
+		{
+			MEMORY_BASIC_INFORMATION region;
+			DWORD low = stack_low;
+
+			while (low > 0x10000 && VirtualQuery((void *)(low - 1), &region, sizeof(region)) &&
+				region.State == MEM_COMMIT && !(region.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+			{
+				low = (DWORD)region.BaseAddress;
+			}
+			stack_low = low;
+		}
 		if (!have_context)
 		{
 			win9x_trace("watch: no context");
@@ -161,7 +182,11 @@ void win9x_watch_start(void)
 		MEMORY_BASIC_INFORMATION region;
 
 		if (VirtualQuery(&region, &region, sizeof(region)))
+		{
 			stack_top = (DWORD)region.BaseAddress + region.RegionSize;
+			stack_low = (DWORD)region.BaseAddress;
+		}
+		__asm__("movl %%ss, %0" : "=r"(flat_stack_segment));
 	}
 	{
 		char line[128];

@@ -1,0 +1,96 @@
+retro_sdl test
+base path: C:\WINDOWS\ALL USERS\DESKTOP\OPENCE\
+thread: answered, status 42, 101 ms
+desktop: 1024x768 at 0 Hz, format 16161804
+fullscreen modes: 14
+  1920x1440 at 0 Hz
+  1856x1392 at 0 Hz
+  1792x1344 at 0 Hz
+  1920x1200 at 0 Hz
+  1920x1080 at 0 Hz
+  1600x1200 at 0 Hz
+  1600x1024 at 0 Hz
+  1280x1024 at 0 Hz
+  1280x960 at 0 Hz
+  1152x864 at 0 Hz
+  1024x768 at 0 Hz
+  960x720 at 0 Hz
+  800x600 at 0 Hz
+  640x480 at 0 Hz
+OpenGL vendor: 3Dfx Interactive Inc.
+OpenGL renderer: 3Dfx/Voodoo3 (tm)/2 TMUs/16 MB SDRAM/ICD (Nov  2 2000)
+OpenGL version: 1.1.0
+OpenGL largest texture: 256
+OpenGL bits: red 5
+OpenGL bits: depth 16
+OpenGL bits: stencil 8
+OpenGL multitexture units: glActiveTextureARB found
+OpenGL swap interval: set
+OpenGL extensions:
+  GL_ARB_multitexture
+  GL_EXT_abgr
+  GL_EXT_bgra
+  GL_EXT_clip_volume_hint
+  GL_EXT_compiled_vertex_array
+  GL_EXT_packed_pixels
+  GL_EXT_point_parameters
+  GL_EXT_stencil_wrap
+  GL_EXT_texture_env_add
+  GL_EXT_vertex_array
+  GL_SGIS_texture_edge_clamp
+  GL_EXT_paletted_texture
+  GL_EXT_shared_texture_palette
+  GL_SGIS_multitexture
+  WGL_EXT_extensions_string
+  WGL_3DFX_gamma_control
+  WGL_EXT_swap_control
+  WGL_ARB_extensions_string
+sound device: Microsoft Sound Mapper
+sound: open, playing
+event: focus gained
+event: motion at 402,329 moved 402,329 (1 so far)
+event: focus lost
+event: focus gained
+event: mouse button 1 down at 524,376
+event: mouse button 1 up at 524,376
+event: key Space down (scancode 44, raw 39)
+tone off (callbacks so far: 2129)
+event: key Space up (scancode 44, raw 39)
+event: key Space down (scancode 44, raw 39)
+tone on (callbacks so far: 2145)
+event: key Space up (scancode 44, raw 39)
+event: key Space down (scancode 44, raw 39)
+tone off (callbacks so far: 2151)
+event: key Space up (scancode 44, raw 39)
+event: mouse button 1 down at 524,376
+event: mouse button 1 up at 524,376
+event: key Space down (scancode 44, raw 39)
+tone on (callbacks so far: 2222)
+event: key Space up (scancode 44, raw 39)
+event: key Space down (scancode 44, raw 39)
+tone off (callbacks so far: 2246)
+event: key Space up (scancode 44, raw 39)
+event: key Space down (scancode 44, raw 39)
+tone on (callbacks so far: 2280)
+event: key Space up (scancode 44, raw 39)
+event: key Left Ctrl down (scancode 224, raw 1d)
+event: key Left Ctrl up (scancode 224, raw 1d)
+event: key Left Ctrl down (scancode 224, raw 1d)
+event: key Left Shift down (scancode 225, raw 2a)
+event: key G down (scancode 10, raw 22)
+event: key Left Ctrl up (scancode 224, raw 1d)
+event: key G up (scancode 10, raw 22)
+event: key Left Shift up (scancode 225, raw 2a)
+event: key G up (scancode 10, raw 22)
+event: key Left Shift up (scancode 225, raw 2a)
+event: key Left Ctrl up (scancode 224, raw 1d)
+event: key Left Ctrl down (scancode 224, raw 1d)
+event: key Left Alt down (scancode 226, raw 38)
+event: key Left Ctrl up (scancode 224, raw 1d)
+event: key Left Alt up (scancode 226, raw 38)
+event: key Left GUI down (scancode 227, raw 5b)
+event: focus lost
+event: focus gained
+event: mouse button 1 down at 485,429
+event: mouse button 1 up at 485,429
+event: focus lost

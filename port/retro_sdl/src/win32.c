@@ -1591,7 +1591,9 @@ bool SDL_GetAudioDeviceFormat(SDL_AudioDeviceID device, SDL_AudioSpec *spec, int
 }
 
 /* (the device's format: the stream's rate if it takes it, else 44100 or
-22050 Hz; two channels, or one) */
+22050 Hz; two channels, or one; the last refusal's reason kept) */
+static MMRESULT audio_open_error;
+
 static bool audio_device_open(SDL_AudioStream *stream)
 {
 	static const int rates[] = { 0, 44100, 22050, 11025 };
@@ -1612,8 +1614,9 @@ static bool audio_device_open(SDL_AudioStream *stream)
 			format.wBitsPerSample = 16;
 			format.nBlockAlign = (WORD)(channels * 2);
 			format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
-			if (waveOutOpen(&stream->device, WAVE_MAPPER, &format, (DWORD_PTR)stream->event, 0,
-				CALLBACK_EVENT) == MMSYSERR_NOERROR)
+			audio_open_error = waveOutOpen(&stream->device, WAVE_MAPPER, &format, (DWORD_PTR)stream->event, 0,
+				CALLBACK_EVENT);
+			if (audio_open_error == MMSYSERR_NOERROR)
 			{
 				stream->device_channels = channels;
 				stream->device_rate = rate;
@@ -1756,7 +1759,14 @@ SDL_AudioStream *SDL_OpenAudioDeviceStream(SDL_AudioDeviceID device, const SDL_A
 		if (stream->event)
 			CloseHandle(stream->event);
 		free(stream);
-		SDL_SetError("cannot open the sound device");
+		/* (MMSYSERR_ALLOCATED: another program has it, as a sound card's
+		driver of the time takes one program at a time) */
+		if (audio_open_error == MMSYSERR_ALLOCATED)
+			SDL_SetError("the sound device is in use by another program");
+		else if (audio_open_error == MMSYSERR_NODRIVER || audio_open_error == MMSYSERR_BADDEVICEID)
+			SDL_SetError("no sound device (waveOut error %u)", (unsigned)audio_open_error);
+		else
+			SDL_SetError("cannot open the sound device (waveOut error %u)", (unsigned)audio_open_error);
 		return NULL;
 	}
 	for (index = 0; index < AUDIO_BUFFER_COUNT; index++)
