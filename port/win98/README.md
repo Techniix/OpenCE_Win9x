@@ -12,7 +12,7 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | --- | --- |
 | `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). `probe/results/` has its reports. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
-| Memory window | Cannot be at 0x80000000 (below), so it moves. Relocating a map's tags (`port/linux/game/tag_relocate.c`) works on all 24 retail Xbox maps (`map_validate --relocation`, below). The game itself does not move the window yet. |
+| Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
 | Game units (`build_game.py`, `include/`) | All 511 compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's C runtime headers, through hybrid precision. Not linked yet. |
 | Platform layer, link against msvcrt.dll | Not started. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
@@ -102,3 +102,12 @@ addresses in the old tag cache, and none is a pointer the game follows:
 - the names of tag references, which the game resolves by index;
 - data that looks like an address: colours (`hudg` +0xd0), packed values in
   scenarios, animations and structure bsps.
+
+## A moved window in play
+
+A Linux build with `--window-base 0x20000000` and a default build played
+`tools/net_compare.py`'s network games against each other on bloodgulch,
+beavercreek, sidewinder and damnation, each build hosting in turn: 8 of 8
+games in step, positions apart by 0.04-0.06 world units on average and the
+mismatched seconds (grenades, rounds) within the netcode's round trip, as
+between identical builds (port/linux/NETCODE.md, "Comparing two builds").
