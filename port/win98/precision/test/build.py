@@ -42,13 +42,13 @@ def build(variant):
             run(a)
         else:
             cw = '0x007F' if variant == 'hybrid' else '0x037F'
-            base = flags(c, '-march=pentium2', ['-DX87', f'-DX87_START_CW={cw}'])
+            base = flags(c, '-march=pentium-mmx', ['-DX87', f'-DX87_START_CW={cw}'])
             if variant == 'hybrid' and src in game:
                 run(base + ['-S', '-emit-llvm', path, '-o', f'{out}/{name}.ll'])
                 r = subprocess.run([sys.executable, os.path.join(PRECISION, 'rewrite.py'), f'{out}/{name}.ll', f'{out}/{name}.x87.ll'], capture_output=True, text=True)
                 sys.stderr.write(r.stderr)
                 if r.returncode: raise SystemExit(r.stderr)
-                run(['clang', '--target=i686-linux-gnu', '-m32', '-march=pentium2', '-O2', '-Xclang', '-disable-llvm-optzns', '-c', f'{out}/{name}.x87.ll', '-o', f'{out}/{name}.o'])
+                run(['clang', '--target=i686-linux-gnu', '-m32', '-march=pentium-mmx', '-O2', '-Xclang', '-disable-llvm-optzns', '-c', f'{out}/{name}.x87.ll', '-o', f'{out}/{name}.o'])
             else:
                 extra = []
                 if variant == 'hybrid' and 'musl-math' in src:
@@ -56,7 +56,7 @@ def build(variant):
                     extra = ['-ffp-eval-method=source']
                 run(base + extra + ['-c', path, '-o', f'{out}/{name}.o'])
         objs.append(f'{out}/{name}.o')
-    run(['clang', '--target=i686-linux-gnu', '-m32', '-O1', '-ffreestanding', '-fno-builtin', '-fno-pic', '-march=x86-64' if variant == 'sse2' else '-march=pentium2', '-c', os.path.join(HERE, 'stubs.c'), '-o', f'{out}/stubs.o'])
+    run(['clang', '--target=i686-linux-gnu', '-m32', '-O1', '-ffreestanding', '-fno-builtin', '-fno-pic', '-march=x86-64' if variant == 'sse2' else '-march=pentium-mmx', '-c', os.path.join(HERE, 'stubs.c'), '-o', f'{out}/stubs.o'])
     objs.append(f'{out}/stubs.o')
     if variant != 'sse2':
         run(['clang', '--target=i686-linux-gnu', '-m32', '-c', os.path.join(PRECISION, 'x87_helpers.S'), '-o', f'{out}/x87_helpers.o'])

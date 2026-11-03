@@ -1,18 +1,19 @@
 # Windows 9x (work in progress)
 
 A build of OpenCE for Windows 95, 98 and Me on the hardware of their time:
-a Pentium II or later without SSE, and a fixed-function OpenGL 1.1 card
-(Voodoo 3, TNT, Rage 128, GeForce 2). The fixed-function renderer is meant to
+a Pentium MMX-class processor or later (i586: no CMOV, no SSE, so that the
+K6-2, K6-III, Cyrix and VIA processors run it too), and a fixed-function
+OpenGL 1.1 card (Voodoo 3, TNT, Rage 128, GeForce 2). The fixed-function renderer is meant to
 be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 
 ## Status
 
 | Part | State |
 | --- | --- |
-| `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). Not yet run on Windows 98. |
+| `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). `probe/results/` has its reports. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
-| Memory window at 0x80000000 | Waiting on the probe's results. |
-| Game units (`build_game.py`, `include/`) | All 511 compile for i686-w64-windows-gnu (Pentium II, no SSE) on mingw-w64's C runtime headers, through hybrid precision. Not linked yet. |
+| Memory window | Cannot be at 0x80000000 (below): to be moved, with the tag cache relocated as maps load. |
+| Game units (`build_game.py`, `include/`) | All 511 compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's C runtime headers, through hybrid precision. Not linked yet. |
 | Platform layer, link against msvcrt.dll | Not started. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
 | Win32 replacement for SDL3 | Not started. |
@@ -50,3 +51,33 @@ range, so results that overflow or become denormal in single precision can
 still differ (the test's inputs do not reach that range); the thread start
 code and the game's `_control87` calls must keep the control word at 0x007F.
 `tools/net_compare.py` with real maps is the full test.
+
+## What the first probe found
+
+`probe/results/86box-win98se-cyrix3-voodoo3.txt`: Windows 98 SE in 86Box,
+a VIA Cyrix III, 128 MB, a Voodoo 3.
+
+- **The Xbox memory window cannot be at 0x80000000.** On Windows 9x that is
+  the shared arena, and the system's own allocations fill its first 38 MB
+  (0x80000000-0x825AA000); neither VirtualAlloc nor a file mapping placed with
+  MapViewOfFileEx can take it (error 8). The private arena is free (2 GB; the
+  Custom Edition window at 0x40440000 reserves). So the window moves into the
+  private arena, and a map's tag data, which is linked to 0x803A6000, is
+  relocated as it loads. The tag validator (port/linux/game/tag_validate.c)
+  already walks every block and data pointer of every tag through the tag
+  schemas, so relocation can follow the same walk; it can be developed and
+  checked on Linux, against the unrelocated tags.
+- **No SSE at all**, as expected: hybrid precision is needed. The build
+  targets i586 since the Cyrix III, the VIA C3 and the K6 family lack CMOV.
+- **OpenGL 1.1 with two texture units**, `GL_ARB_multitexture` and
+  `GL_EXT_texture_env_add` but not `GL_ARB_texture_env_combine`; textures of
+  256x256 at most, 16-bit colour and depth, no S3TC but
+  `GL_EXT_paletted_texture`. The fixed-function renderer works with
+  modulate and add per texture unit and multi-pass blending, and converts
+  DXT textures to 16-bit or paletted ones of at most 256x256.
+- **Missing system functions** (each to be replaced): `getaddrinfo`,
+  `AddVectoredExceptionHandler`, condition variables, `GetTickCount64`,
+  WinHTTP (WinINet is present), DbgHelp, BCrypt (CryptoAPI is present),
+  XInput, DirectInput 8 (DirectInput is present), `DirectSoundCreate8`
+  (`DirectSoundCreate` is present), `_aligned_malloc` in msvcrt.dll. No
+  Direct3D 8 or 9.

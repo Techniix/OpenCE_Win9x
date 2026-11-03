@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / "port" / "win98"
 BUILD = ROOT / "build" / "win98"
 OBJ = BUILD / "obj"
-TARGET = ["--target=i686-w64-windows-gnu", "-march=pentium2"]
+TARGET = ["--target=i686-w64-windows-gnu", "-march=pentium-mmx"]
 
 
 def mingw_headers() -> Path:

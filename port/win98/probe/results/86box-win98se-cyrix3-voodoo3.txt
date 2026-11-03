@@ -1,0 +1,221 @@
+OpenCE Windows 98 probe
+
+== 0. System ==
+  Windows 4.10 build 2222, platform 1 (9x), " A "
+  RAM 127 MB (83 MB free), page file 1920 MB, address space 2041 MB free
+  performance counter: 1193180 Hz
+
+== 1. Xbox memory window at 0x80000000 ==
+  address space 80000000-C0000000:
+    80000000-80001000 reserved       4 KB
+    80001000-80002000 committed      4 KB
+    80002000-80003000 committed      4 KB
+    80003000-80004000 committed      4 KB
+    80004000-80008000 committed     16 KB
+    80008000-80014000 reserved      48 KB
+    80014000-80015000 committed      4 KB
+    80015000-80016000 committed      4 KB
+    80016000-80017000 committed      4 KB
+    80017000-80018000 committed      4 KB
+    80018000-80019000 committed      4 KB
+    80019000-8001A000 committed      4 KB
+    8001A000-800B2000 committed    608 KB
+    800B2000-800B3000 committed      4 KB
+    800B3000-802B9000 committed   2072 KB
+    802B9000-802E9000 committed    192 KB
+    802E9000-8038B000 committed    648 KB
+    8038B000-80391000 reserved      24 KB
+    80391000-8053C000 committed   1708 KB
+    8053C000-8053D000 reserved       4 KB
+    8053D000-80563000 committed    152 KB
+    80563000-80595000 reserved     200 KB
+    80595000-80661000 committed    816 KB
+    80661000-80666000 reserved      20 KB
+    80666000-8066A000 committed     16 KB
+    8066A000-8066B000 reserved       4 KB
+    8066B000-80683000 committed     96 KB
+    80683000-80684000 reserved       4 KB
+    80684000-806D6000 committed    328 KB
+    806D6000-816B6000 reserved   16256 KB
+    816B6000-816C3000 committed     52 KB
+    816C3000-816C9000 reserved      24 KB
+    816C9000-816E9000 committed    128 KB
+    816E9000-816F9000 reserved      64 KB
+    816F9000-816FB000 committed      8 KB
+    816FB000-8170B000 reserved      64 KB
+    8170B000-8172F000 committed    144 KB
+    8172F000-8180A000 reserved     876 KB
+    8180A000-8180B000 committed      4 KB
+    8180B000-8180C000 committed      4 KB
+    8180C000-81C0A000 reserved    4088 KB
+    81C0A000-81C0B000 committed      4 KB
+    81C0B000-81C0C000 committed      4 KB
+    81C0C000-81C0F000 reserved      12 KB
+    81C0F000-81C10000 committed      4 KB
+    81C10000-81C16000 reserved      24 KB
+    81C16000-81C17000 committed      4 KB
+    81C17000-81C1A000 committed     12 KB
+    81C1A000-81C1D000 committed     12 KB
+    81C1D000-81C48000 committed    172 KB
+    81C48000-81C51000 committed     36 KB
+    81C51000-81C52000 committed      4 KB
+    81C52000-81C55000 committed     12 KB
+    81C55000-81CD1000 reserved     496 KB
+    81CD1000-81CD2000 committed      4 KB
+    81CD2000-81CE3000 committed     68 KB
+    81CE3000-81CF2000 reserved      60 KB
+    81CF2000-81CF7000 committed     20 KB
+    81CF7000-81EF1000 reserved    2024 KB
+    81EF1000-81EF2000 committed      4 KB
+    81EF2000-81EF5000 committed     12 KB
+    81EF5000-81F71000 reserved     496 KB
+    81F71000-81F72000 committed      4 KB
+    81F72000-81F83000 committed     68 KB
+    81F83000-81F92000 reserved      60 KB
+    81F92000-81F97000 committed     20 KB
+    81F97000-82191000 reserved    2024 KB
+    82191000-82192000 committed      4 KB
+    82192000-82193000 committed      4 KB
+    82193000-821A2000 reserved      60 KB
+    821A2000-821AC000 committed     40 KB
+    821AC000-823A1000 reserved    2004 KB
+    823A1000-823A2000 committed      4 KB
+    823A2000-823A3000 committed      4 KB
+    823A3000-823A8000 committed     20 KB
+    823A8000-823A9000 committed      4 KB
+    823A9000-823AA000 committed      4 KB
+    823AA000-823AB000 committed      4 KB
+    823AB000-825A9000 reserved    2040 KB
+    825A9000-825AA000 committed      4 KB
+  VirtualAlloc reserve 128 MB at 80000000: failed (error 8)
+  file mapping of 512 MB at 80000000: failed (error 8)
+  file mapping of 128 MB at 80000000: failed (error 8)
+  file mapping of 64 MB at 80000000: failed (error 8)
+  128 MB mapping anywhere: 82BFD000
+
+== 2. Custom Edition window at 0x40440000 ==
+  VirtualAlloc reserve 23 MB at 40440000: ok (error 0)
+
+== 3. Processor ==
+  vendor: CyrixInstead
+  family/model/stepping signature 00000601, MMX 1, SSE 0, SSE2 0, SSE3 0
+
+== 4. OpenGL ==
+  pixel format 2: colour 16, depth 16, stencil 8, hardware
+  vendor:   3Dfx Interactive Inc.
+  renderer: 3Dfx/Voodoo3 (tm)/2 TMUs/16 MB SDRAM/ICD (Nov  2 2000)
+  version:  1.1.0
+  GLSL:     none
+  max texture size: 256
+  texture units (fixed function): 2
+  texture image units (shaders): 0
+  vertex attributes: 0
+  vertex uniform components: 0
+  fragment uniform components: 0
+  max anisotropy: 0
+  register combiners (NV): 0
+  extensions of interest:
+    GL_ARB_shader_objects                -
+    GL_ARB_vertex_shader                 -
+    GL_ARB_fragment_shader               -
+    GL_ARB_shading_language_100          -
+    GL_ARB_vertex_buffer_object          -
+    GL_ARB_pixel_buffer_object           -
+    GL_EXT_framebuffer_object            -
+    GL_ARB_texture_non_power_of_two      -
+    GL_EXT_texture_compression_s3tc      -
+    GL_ARB_occlusion_query               -
+    GL_EXT_texture_filter_anisotropic    -
+    GL_ARB_texture_rectangle             -
+    GL_EXT_draw_range_elements           -
+    GL_ARB_texture_env_combine           -
+    GL_ARB_texture_cube_map              -
+    GL_ARB_vertex_array_object           -
+    GL_APPLE_vertex_array_object         -
+    GL_ARB_map_buffer_range              -
+    GL_ARB_draw_elements_base_vertex     -
+    GL_ARB_sync                          -
+    GL_NV_fence                          -
+    GL_APPLE_fence                       -
+    GL_NV_register_combiners             -
+    GL_NV_register_combiners2            -
+    GL_NV_texture_shader                 -
+    GL_NV_texture_shader2                -
+    GL_NV_texture_shader3                -
+    GL_NV_vertex_program                 -
+    GL_NV_vertex_program1_1              -
+    GL_ARB_vertex_program                -
+    GL_ARB_fragment_program              -
+    GL_ATI_fragment_shader               -
+  all extensions:
+    GL_ARB_multitexture GL_EXT_abgr GL_EXT_bgra GL_EXT_clip_volume_hint GL_EXT_compiled_vertex_array GL_EXT_packed_pixels GL_EXT_point_parameters GL_EXT_stencil_wrap GL_EXT_texture_env_add GL_EXT_vertex_array GL_SGIS_texture_edge_clamp GL_EXT_paletted_texture GL_EXT_shared_texture_palette GL_SGIS_multitexture WGL_EXT_extensions_string WGL_3DFX_gamma_control WGL_EXT_swap_control WGL_ARB_extensions_string 
+
+== 5. Libraries and functions ==
+  kernel32.dll   present
+    InitializeCriticalSectionAndSpinCount    yes
+    TryEnterCriticalSection                  yes
+    SwitchToThread                           yes
+    SignalObjectAndWait                      yes
+    AddVectoredExceptionHandler              -
+    GetTickCount64                           -
+    CreateWaitableTimerA                     yes
+    IsProcessorFeaturePresent                yes
+    GetFileAttributesExA                     yes
+    InterlockedCompareExchange               yes
+    CreateFileW                              yes
+    MultiByteToWideChar                      yes
+    GetVersionExA                            yes
+    QueueUserAPC                             yes
+    CreateToolhelp32Snapshot                 yes
+    InitializeConditionVariable              -
+    FlsAlloc                                 -
+    GetSystemTimeAsFileTime                  yes
+  ws2_32.dll     present
+    WSAStartup                               yes
+    getaddrinfo                              -
+    freeaddrinfo                             -
+    WSAPoll                                  -
+    inet_pton                                -
+    select                                   yes
+    WSAEventSelect                           yes
+  advapi32.dll   present
+    CryptAcquireContextA                     yes
+    CryptGenRandom                           yes
+    RegOpenKeyExA                            yes
+  iphlpapi.dll   present
+    GetAdaptersInfo                          yes
+    GetAdaptersAddresses                     -
+    GetBestInterface                         yes
+  dsound.dll     present
+    DirectSoundCreate                        yes
+    DirectSoundCreate8                       -
+  dinput.dll     present
+    DirectInputCreateA                       yes
+  dinput8.dll    MISSING
+  winmm.dll      present
+    joyGetPosEx                              yes
+    timeBeginPeriod                          yes
+    waveOutOpen                              yes
+  d3d8.dll       MISSING
+  d3d9.dll       MISSING
+  msvcrt.dll     present
+    _beginthreadex                           yes
+    _ftol                                    yes
+    _vsnprintf                               yes
+    _aligned_malloc                          -
+    _snwprintf                               yes
+    strtok_s                                 -
+  unicows.dll    MISSING
+  winhttp.dll    MISSING
+  wininet.dll    present
+  dbghelp.dll    MISSING
+  bcrypt.dll     MISSING
+  xinput1_3.dll  MISSING
+
+== Summary ==
+Windows 4.10.2222  A 
+RAM: 127 MB
+Memory window at 0x80000000: NOT available
+Custom Edition window: ok
+SSE2: missing, no SSE either (offline-only build needed)
+OpenGL: 1.1.0, GLSL none
