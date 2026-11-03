@@ -12,7 +12,8 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). Not yet run on Windows 98. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
 | Memory window at 0x80000000 | Waiting on the probe's results. |
-| Toolchain (i686, x87, msvcrt.dll) | Not started. |
+| Game units (`build_game.py`, `include/`) | All 511 compile for i686-w64-windows-gnu (Pentium II, no SSE) on mingw-w64's C runtime headers, through hybrid precision. Not linked yet. |
+| Platform layer, link against msvcrt.dll | Not started. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
 | Win32 replacement for SDL3 | Not started. |
 
