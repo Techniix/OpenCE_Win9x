@@ -12,7 +12,7 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | --- | --- |
 | `probe/` | Done: a small program that reports what a Windows 9x machine offers (memory window, CPU, OpenGL, system libraries). `probe/results/` has its reports. |
 | `precision/` | Prototype works: x87 maths that match the SSE2 builds bit for bit, for network play with them (below). |
-| Memory window | Cannot be at 0x80000000 (below): to be moved, with the tag cache relocated as maps load. |
+| Memory window | Cannot be at 0x80000000 (below), so it moves. Relocating a map's tags (`port/linux/game/tag_relocate.c`) works on all 24 retail Xbox maps (`map_validate --relocation`, below). The game itself does not move the window yet. |
 | Game units (`build_game.py`, `include/`) | All 511 compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's C runtime headers, through hybrid precision. Not linked yet. |
 | Platform layer, link against msvcrt.dll | Not started. |
 | Fixed-function OpenGL 1.1 renderer | Not started. |
@@ -81,3 +81,24 @@ a VIA Cyrix III, 128 MB, a Voodoo 3.
   XInput, DirectInput 8 (DirectInput is present), `DirectSoundCreate8`
   (`DirectSoundCreate` is present), `_aligned_malloc` in msvcrt.dll. No
   Direct3D 8 or 9.
+
+## Relocation, checked on the retail maps
+
+`tools/map_validate --relocation <maps folder>` reads each Xbox map where it
+is linked and again at 0x503A6000 with its tags relocated, validates both, and
+compares them. On the 24 maps of the retail disc (the campaign, the
+multiplayer maps and ui.map) every map passes: about 790,000 pointers moved
+in all, the tags and every structure bsp the same but for them, and no
+relocated map needs a correction the linked one does not. That last part is
+the strongest evidence: the validator checks every pointer the game follows,
+and one left unmoved would point outside the relocated tag cache.
+
+The notes it prints are words in tags' structures that still look like
+addresses in the old tag cache, and none is a pointer the game follows:
+
+- pointers to what the schemas leave out because the game never reads it:
+  a scenario's editor data, comments, child scenarios and decals, a particle
+  system's own physics constants, the globals' playlist;
+- the names of tag references, which the game resolves by index;
+- data that looks like an address: colours (`hudg` +0xd0), packed values in
+  scenarios, animations and structure bsps.
