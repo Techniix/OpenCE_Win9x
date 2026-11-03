@@ -45,7 +45,8 @@ editor's data in a scenario), or data that looks like an address.
 usage: map_validate [--strict] [--quiet] [--maps folder] [--fuzz iterations [--seed n] [--log file]]
 	[--relocation] map.map|folder...
 
-A folder stands for every .map file in it.
+A folder stands for every .map file in it. Under WSL a Windows path
+(C:\Games\maps) is taken as /mnt/c/Games/maps.
 */
 
 #include <stdarg.h>
@@ -1252,6 +1253,29 @@ static enum cache_file_format file_format(char const *path)
 
 /* ---------- what to check */
 
+/* a Windows path (C:\Games\maps) as WSL sees it (/mnt/c/Games/maps), so
+that a folder can be given as Explorer shows it; any other path as it is */
+static char const *wsl_path(char const *path, char *buffer, size_t size)
+{
+	size_t index;
+	size_t length;
+
+	if (!((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) || path[1] != ':' ||
+		(path[2] != '\\' && path[2] != '/' && path[2] != 0))
+	{
+		return path;
+	}
+	snprintf(buffer, size, "/mnt/%c%s", path[0] | 0x20, path + 2);
+	length = strlen(buffer);
+	for (index = 0; index < length; index++)
+	{
+		if (buffer[index] == '\\')
+			buffer[index] = '/';
+	}
+
+	return buffer;
+}
+
 /* the options and the tag caches main sets up */
 static unsigned char *check_tag_cache;
 static unsigned char *check_custom_edition_tag_cache;
@@ -1400,7 +1424,6 @@ int main(int argc, char **argv)
 	unsigned char *custom_edition_tag_cache;
 	unsigned char *relocated_cache = NULL;
 	int relocation = 0;
-	int strict = 0;
 	int failed = 0;
 	long fuzz_iterations = 0;
 	unsigned long seed = 1;
@@ -1428,7 +1451,6 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[argument], "--strict"))
 		{
-			strict = 1;
 			check_strict = 1;
 			continue;
 		}
@@ -1480,15 +1502,22 @@ int main(int argc, char **argv)
 			continue;
 		}
 		{
+			char translated[4096];
+			char const *path = wsl_path(argv[argument], translated, sizeof(translated));
 			struct stat status;
 
-			/* (a folder: every map in it) */
-			if (!stat(argv[argument], &status) && S_ISDIR(status.st_mode))
+			if (stat(path, &status))
 			{
-				if (map_folder_check(argv[argument]))
+				printf("%s: not found\n", path);
+				failed = 1;
+			}
+			/* (a folder: every map in it) */
+			else if (S_ISDIR(status.st_mode))
+			{
+				if (map_folder_check(path))
 					failed = 1;
 			}
-			else if (map_file_check(argv[argument]))
+			else if (map_file_check(path))
 			{
 				failed = 1;
 			}
