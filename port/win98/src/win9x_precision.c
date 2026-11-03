@@ -21,3 +21,10 @@ unsigned int _control87(unsigned int new_value, unsigned int mask)
 	/* (_PC_24 | _RC_NEAR | every exception masked, as msvcrt reports it) */
 	return 0x0002001F;
 }
+
+/* each thread port/retro_sdl starts (SDL_CreateThreadRuntime, the sound's):
+Windows starts it with the control word the C runtime's default leaves */
+void retro_sdl_thread_started(void)
+{
+	x87_precision_single();
+}

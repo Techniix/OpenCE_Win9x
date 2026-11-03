@@ -213,12 +213,19 @@ def platform_units(system, sdl: Path):
     # what Windows 9x lacks (port/win98/include/win9x_compat.h), and the
     # x87's control word under hybrid precision
     units.append(("port/win98/src/win9x_compat.c", win32, False))
+    # what Windows 9x has only on NT: the wide-character functions, security
+    units.append(("port/win98/src/win9x_unicode.c", win32, False))
     units.append(("port/win98/src/win9x_precision.c", win32, False))
     # the C runtime under the Linux build's names, which the game's units
     # call; what Windows 98's msvcrt.dll and ws2_32.dll lack
     units.append(("port/win98/src/win9x_linux_crt.c", win32, False))
     units.append(("port/win98/src/win9x_crt.c", win32, False))
     units.append(("port/win98/src/win9x_net.c", win32, False))
+    # SDL 3's functions the platform layer calls (port/retro_sdl)
+    retro_sdl = abi + ["-std=gnu11", "-D_WIN32_WINNT=0x0410", "-include", "port/win98/include/win9x_compat.h",
+                       f"-I{sdl}", "-Iport/retro_sdl/include", "-Wall", "-Wno-unused-function"] + system["all"]
+    for name in ("common.c", "win32.c"):
+        units.append((f"port/retro_sdl/src/{name}", retro_sdl, False))
     # the assets the Linux build embeds (tools/embed_assets.py, tools/server_ui_embed.py)
     generated = ["build/linux/generated/hud_hires_assets.c", "build/linux/generated/server_ui_assets.c",
                  "build/linux/platform_msvc_semantics.h"]
