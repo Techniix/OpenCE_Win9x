@@ -129,24 +129,20 @@ the Linux build's names.
 
 ## What the link still lacks
 
-`build/win98/undefined.txt` lists it (473 symbols):
+`build.py` links build/win98/halo.exe with the build's own runtime
+(`runtime/`: start-up, static constructors, thread-local storage, the stack
+probe; compiler-rt's 64-bit division) and import libraries made from
+mingw-w64's definitions, less every function the build defines itself, so
+that the linker takes those. What Windows 98 lacks is in `src/`:
 
-- **SDL 3** (146 functions): an SDL-compatible layer of its own, with a
-  backend per system (Win32 first; Mac OS 9 and DOS can add theirs), in place
-  of SDL, which does not run on Windows 9x.
-- **Windows functions** (about 190, imported): most are in Windows 98's
-  DLLs. The rest go in `win9x_compat.c`: the wide-character file functions
-  (stubs on Windows 9x: to the ANSI ones), WinHTTP (on mbedTLS, for the
-  master servers' HTTPS), `getaddrinfo` and `getnameinfo` (on
-  `gethostbyname`), `AddVectoredExceptionHandler` (on
-  `SetUnhandledExceptionFilter`), `GetFileSizeEx`, `SetFilePointerEx`,
-  `GlobalMemoryStatusEx`, `MoveFileExA`, `GetAdaptersAddresses` (on
-  `GetAdaptersInfo`), `BCryptGenRandom` (on CryptoAPI), and the security
-  and console functions, which can do nothing.
-- **The C runtime** (about 140): msvcrt.dll's, by an import library made
-  from mingw-w64's definitions, and `_time32`, `_localtime32` and the other
-  functions newer than Windows 98's msvcrt.dll.
-- **A runtime of the build's own**: the start-up (`__main`, static
-  constructors, `x87_precision_single` before anything runs), thread-local
-  storage (`_tls_index`), and the compiler's 64-bit division (`__divdi3`
-  and the like).
+| File | What |
+| --- | --- |
+| `win9x_compat.c` | Condition variables (on a semaphore), vectored exception handlers (on `SetUnhandledExceptionFilter`, for the texture watch), `GetFileSizeEx`, `SetFilePointerEx`, `GlobalMemoryStatusEx`, `BCryptGenRandom` and `rand_s` (CryptoAPI), the newer C runtime's `*_s` functions and stdio, and failing stubs for what Windows 9x does without: WinHTTP (the updater and crash uploads), DbgHelp's minidumps, the firmware table, `AttachConsole`. |
+| `win9x_crt.c` | C99's float maths and 64-bit conversions, and what mingw-w64's headers expect its runtime library to define. |
+| `win9x_net.c` | `getaddrinfo`, `freeaddrinfo`, `getnameinfo` on `gethostbyname` (IPv4). |
+| `win9x_precision.c` | `_control87`, which keeps the x87 in single precision. |
+| `win9x_linux_crt.c` | The C runtime under the Linux build's names, for the game's units. |
+
+What is left (`build/win98/undefined.txt`) is SDL 3's 146 functions: an
+SDL-compatible layer of the build's own, with a backend per system (Win32
+first; Mac OS 9 and DOS can add theirs).

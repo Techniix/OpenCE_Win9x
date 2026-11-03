@@ -20,9 +20,10 @@ It needs a configured Linux build (python3 configure.py --window-base
 SDL 3's headers are cloned into build/win98/third_party the first time
 (git), or taken from MINGW_SOURCE and SDL_SOURCE.
 
-Objects go to build/win98/obj, and the symbols the objects need and none of
-them define are listed in build/win98/undefined.txt: what the link (not done
-yet) must find in Windows 98's DLLs, in a runtime, or in replacements.
+Objects go to build/win98/obj. They are linked, with the build's own runtime
+(port/win98/runtime) and import libraries made from mingw-w64's definitions
+(build/win98/lib), to build/win98/halo.exe; while symbols are missing, the
+link lists them in build/win98/undefined.txt.
 """
 
 import argparse
@@ -51,6 +52,13 @@ THIRD_PARTY = BUILD / "third_party"
 WINDOW_BASE = 0x20000000
 TARGET = ["--target=i686-w64-windows-gnu", "-march=pentium-mmx"]
 MINGW_URL = "https://github.com/mirror/mingw-w64"
+LLVM_URL = "https://github.com/llvm/llvm-project"
+# the compiler's 64-bit division, from compiler-rt (the build links no
+# libgcc or compiler-rt library)
+COMPILER_RT_BUILTINS = ("divdi3.c", "moddi3.c", "udivdi3.c", "umoddi3.c", "udivmoddi4.c", "int_util.c")
+# the DLLs the program imports from: Windows 98's (port/win98/probe/results)
+DLLS = ("msvcrt", "kernel32", "user32", "gdi32", "advapi32", "ws2_32", "wsock32", "winmm", "shell32", "comdlg32",
+        "ole32", "opengl32", "iphlpapi", "wininet", "dsound", "dinput")
 SDL_URL = "https://github.com/libsdl-org/SDL"
 SDL_TAG = "release-3.4.16"
 MUSL_MATH_DIR = ROOT / "port" / "third_party" / "musl-math"
@@ -74,7 +82,19 @@ def mingw_source() -> Path:
         return Path(os.environ["MINGW_SOURCE"])
     return sparse_clone(MINGW_URL, THIRD_PARTY / "mingw-w64",
                         ["mingw-w64-headers/include", "mingw-w64-headers/crt", "mingw-w64-crt/lib32",
-                         "mingw-w64-crt/lib-common"])
+                         "mingw-w64-crt/lib-common", "mingw-w64-crt/def-include"])
+
+
+def compiler_rt_builtins() -> Path:
+    if os.environ.get("COMPILER_RT_SOURCE"):
+        return Path(os.environ["COMPILER_RT_SOURCE"]) / "lib" / "builtins"
+    clone = THIRD_PARTY / "llvm-project"
+    if not clone.is_dir():
+        subprocess.run(["git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse", LLVM_URL, str(clone)],
+                       check=True)
+        subprocess.run(["git", "-C", str(clone), "sparse-checkout", "set", "--no-cone", "/compiler-rt/lib/builtins/",
+                        "/compiler-rt/LICENSE.TXT"], check=True)
+    return clone / "compiler-rt" / "lib" / "builtins"
 
 
 def sdl_include() -> Path:
@@ -163,6 +183,9 @@ def platform_units(system, sdl: Path):
         flag for flag in WINDOWS_ABI_FLAGS if not flag.startswith("--target") and flag not in ("-g", "-gcodeview")]
     platform = abi + PLATFORM_FLAGS + [
         "-include", "port/win98/include/halo_win9x_platform_prefix.h",
+        # (the XDK's inline functions weak, as MSVC's COMDATs merge them: the
+        # Linux build's generated list, tools/linux_msvc_semantics.py)
+        "-include", "build/linux/platform_msvc_semantics.h",
         "-Iport/windows/include/posix", "-Iport/windows/include/crt", "-Iport/linux/src", "-Iport/windows/include",
         f"-I{TOML_DIR}", f"-I{EXPAT_DIR}", f"-I{KCP_DIR}", f"-I{MONOCYPHER_DIR}", f"-I{ZLIB_DIR}",
         "-iquote", "port/linux/include", "-Isource", "-Isource/cseries", f"-I{sdl}", "-Iport/include/xdk",
@@ -191,12 +214,16 @@ def platform_units(system, sdl: Path):
     # x87's control word under hybrid precision
     units.append(("port/win98/src/win9x_compat.c", win32, False))
     units.append(("port/win98/src/win9x_precision.c", win32, False))
-    # the C runtime under the Linux build's names, which the game's units call
+    # the C runtime under the Linux build's names, which the game's units
+    # call; what Windows 98's msvcrt.dll and ws2_32.dll lack
     units.append(("port/win98/src/win9x_linux_crt.c", win32, False))
+    units.append(("port/win98/src/win9x_crt.c", win32, False))
+    units.append(("port/win98/src/win9x_net.c", win32, False))
     # the assets the Linux build embeds (tools/embed_assets.py, tools/server_ui_embed.py)
-    generated = ["build/linux/generated/hud_hires_assets.c", "build/linux/generated/server_ui_assets.c"]
+    generated = ["build/linux/generated/hud_hires_assets.c", "build/linux/generated/server_ui_assets.c",
+                 "build/linux/platform_msvc_semantics.h"]
     subprocess.run(["ninja", "-C", str(ROOT), *generated], check=True, capture_output=True)
-    for source in generated:
+    for source in generated[:2]:
         units.append((source, platform, False))
     return units
 
@@ -233,9 +260,22 @@ def library_units(system):
     return units
 
 
+def runtime_units(system, builtins: Path):
+    """the build's own start-up, thread-local storage and stack probe
+    (port/win98/runtime), and the compiler's 64-bit division"""
+    flags = TARGET + ["-g0", "-O2", "-std=gnu11", "-D_WIN32_WINNT=0x0410", "-DWIN32_LEAN_AND_MEAN"] + system["all"]
+    units = [(f"port/win98/runtime/{name}", flags, False) for name in ("win9x_start.c", "win9x_tls.c")]
+    units.append(("port/win98/runtime/win9x_chkstk.S", TARGET, False))
+    for name in COMPILER_RT_BUILTINS:
+        units.append((str(builtins / name), TARGET + ["-g0", "-O2", "-w"] + system["crt"], False))
+    return units
+
+
 # ---------- compiling
 
 def object_path(source: str) -> Path:
+    if os.path.isabs(source):
+        source = "external/" + Path(source).name
     name = source.replace("/", "__").replace(" ", "_")
     return OBJ / (name.rsplit(".", 1)[0] + ".o")
 
@@ -285,6 +325,82 @@ def undefined_symbols(objects):
     return {name: users for name, users in needed.items() if name not in defined}
 
 
+# ---------- linking
+
+def defined_symbols(objects):
+    """the names (undecorated) the objects define"""
+    names = set()
+    for obj in objects:
+        out = subprocess.run(["llvm-nm", "--defined-only", "--no-sort", str(obj)], capture_output=True,
+                             text=True).stdout
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1] in "TtDdBbRr":
+                # (C's names have one leading underscore on 32-bit Windows)
+                name = parts[2][1:] if parts[2].startswith("_") else parts[2]
+                names.add(re.sub(r"@\d+$", "", name))
+    return names
+
+
+def import_libraries(mingw: Path, defined):
+    """an import library for each DLL, from mingw-w64's definitions, less
+    what the program defines itself (port/win98/src/win9x_compat.c: what
+    Windows 9x lacks), so that the linker takes those"""
+    lib = BUILD / "lib"
+    lib.mkdir(parents=True, exist_ok=True)
+    crt = mingw / "mingw-w64-crt"
+    for name in DLLS:
+        definition = crt / "lib32" / f"{name}.def"
+        if name == "msvcrt":
+            text = subprocess.run(["clang", "-E", "-P", "-x", "c", "-DDEF_I386", f"-I{crt / 'def-include'}",
+                                   str(crt / "lib-common" / "msvcrt.def.in")], capture_output=True, text=True,
+                                  check=True).stdout
+        elif definition.is_file():
+            text = definition.read_text()
+        elif (crt / "lib-common" / f"{name}.def").is_file():
+            text = (crt / "lib-common" / f"{name}.def").read_text()
+        else:
+            continue
+        kept = []
+        for line in text.splitlines():
+            symbol = line.strip().split()[0] if line.strip() else ""
+            bare = re.sub(r"@\d+$", "", symbol)
+            if symbol and not symbol.startswith((";", "LIBRARY", "EXPORTS")) and bare in defined:
+                continue
+            kept.append(line)
+        (lib / f"{name}.def").write_text("\n".join(kept) + "\n")
+        subprocess.run(["llvm-dlltool", "-m", "i386", "-k", "-d", str(lib / f"{name}.def"),
+                        "-l", str(lib / f"lib{name}.a")], check=True)
+    return lib
+
+
+def link(objects, lib: Path):
+    """halo.exe for Windows 4.0 (95, 98, Me; NT 4), with the console (the
+    debug build logs there); the linker's undefined symbols listed"""
+    output = BUILD / "halo.exe"
+    response = BUILD / "link.rsp"
+    response.write_text("\n".join(str(obj) for obj in objects) + "\n")
+    command = ["clang", *TARGET, "-fuse-ld=lld", "-nostdlib", "-o", str(output), f"@{response}", f"-L{lib}",
+               *[f"-l{name}" for name in DLLS],
+               "-Wl,--entry,_mainCRTStartup", "-Wl,--subsystem,console:4.0",
+               "-Wl,--major-os-version,4", "-Wl,--minor-os-version,0",
+               "-Wl,--disable-dynamicbase", "-Wl,--disable-nxcompat", "-Wl,--build-id=none",
+               "-Wl,--stack,0x800000", "-Wl,--error-limit=0"]
+    result = subprocess.run(command, capture_output=True, text=True)
+    undefined = sorted(set(re.findall(r"undefined symbol: (?:__declspec\(dllimport\) )?(\S+)", result.stderr)))
+    with open(BUILD / "undefined.txt", "w") as out:
+        out.write("\n".join(undefined) + ("\n" if undefined else ""))
+    if result.returncode:
+        other = [line for line in result.stderr.splitlines()
+                 if "error:" in line and "undefined symbol" not in line]
+        print(f"link: {len(undefined)} symbols undefined (build/win98/undefined.txt)")
+        for line in other[:10]:
+            print(line)
+        return False
+    print(f"linked {output}")
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--syntax-only", action="store_true")
@@ -292,7 +408,8 @@ def main() -> None:
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     args = parser.parse_args()
 
-    crt, windows_include = mingw_headers(mingw_source())
+    mingw = mingw_source()
+    crt, windows_include = mingw_headers(mingw)
     sdl = sdl_include()
     resources = resource_dir()
     # (msvcrt.dll's printf and strtod, not mingw's own: there is no mingw
@@ -305,7 +422,8 @@ def main() -> None:
         for obj in OBJ.glob("*.o"):
             obj.unlink()
 
-    units = game_units(system) + platform_units(system, sdl) + library_units(system)
+    units = (game_units(system) + platform_units(system, sdl) + library_units(system) +
+             runtime_units(system, compiler_rt_builtins()))
     jobs = [(source, flags, hybrid, args.syntax_only) for source, flags, hybrid in units]
     with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
         results = list(pool.map(compile_unit, jobs))
@@ -317,11 +435,9 @@ def main() -> None:
     if failed or args.syntax_only:
         sys.exit(1 if failed else 0)
 
-    undefined = undefined_symbols([object_path(source) for source, _, _ in units])
-    with open(BUILD / "undefined.txt", "w") as out:
-        for name in sorted(undefined):
-            out.write(f"{name}\t{' '.join(sorted(undefined[name])[:4])}\n")
-    print(f"{len(undefined)} symbols undefined: build/win98/undefined.txt")
+    objects = [object_path(source) for source, _, _ in units]
+    lib = import_libraries(mingw, defined_symbols(objects))
+    sys.exit(0 if link(objects, lib) else 1)
 
 
 if __name__ == "__main__":

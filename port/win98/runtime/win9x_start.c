@@ -1,0 +1,74 @@
+/*
+WIN9X_START.C
+
+The Windows 9x build's start-up, in place of mingw-w64's runtime (which is
+not linked: the build uses msvcrt.dll as Windows 98 has it, and nothing
+newer). The entry point:
+- puts the x87 in single precision, as the game's code runs (hybrid
+  precision, port/win98/README.md), before any of it runs;
+- gets the command line from msvcrt.dll (__getmainargs);
+- runs main, which runs the static constructors first (__main, which clang
+  calls at main's start on the GNU target), and exits with what it returns.
+The constructors are the ones lld lists from the objects' .ctors sections,
+by priority (__CTOR_LIST__: a count or -1, the functions, then 0).
+*/
+
+#include <stdlib.h>
+
+typedef void (*constructor)(void);
+
+/* (lld's, from the .ctors and .dtors sections) */
+extern constructor __CTOR_LIST__[];
+extern constructor __DTOR_LIST__[];
+
+struct startup_information
+{
+	int new_mode;
+};
+
+extern int __getmainargs(int *argc, char ***argv, char ***environment, int wildcard,
+	struct startup_information *information);
+extern void __set_app_type(int type);
+extern void x87_precision_single(void);
+extern int main(int argc, char **argv);
+
+static void destructors_run(void)
+{
+	constructor *entry;
+
+	for (entry = __DTOR_LIST__ + 1; *entry; entry++)
+		(*entry)();
+}
+
+void __main(void)
+{
+	static int done;
+	long count;
+
+	if (done)
+		return;
+	done = 1;
+	/* (in reverse, as GNU ld's mingw runtime runs them: the last listed,
+	the highest priority, first) */
+	for (count = 0; __CTOR_LIST__[count + 1]; count++)
+		;
+	while (count > 0)
+		__CTOR_LIST__[count--]();
+	atexit(destructors_run);
+}
+
+/* the entry point (the linker's --entry) */
+void mainCRTStartup(void)
+{
+	struct startup_information information = { 0 };
+	int argc;
+	char **argv;
+	char **environment;
+
+	x87_precision_single();
+	/* (_CONSOLE_APP: the debug builds log to the console) */
+	__set_app_type(1);
+	__getmainargs(&argc, &argv, &environment, 0, &information);
+	__main();
+	exit(main(argc, argv));
+}
