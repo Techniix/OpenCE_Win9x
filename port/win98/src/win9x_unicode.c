@@ -734,3 +734,80 @@ DWORD WINAPI GetBestInterface(IPAddr address, PDWORD index)
 		return system_GetBestInterface(address, index);
 	return ERROR_NOT_SUPPORTED;
 }
+
+/* ---------- reads and writes at an offset (pread and pwrite,
+win32_posix.c, give ReadFile and WriteFile an OVERLAPPED with the offset,
+which Windows NT takes on any file; Windows 9x has no overlapped I/O on
+disk files, and fails it: there, a seek and a plain read or write, under a
+lock, as no other positioned transfer may move the pointer between them) */
+
+static CRITICAL_SECTION positioned_lock;
+static LONG positioned_lock_state;
+
+static void positioned_lock_enter(void)
+{
+	if (InterlockedCompareExchange(&positioned_lock_state, 1, 0) == 0)
+	{
+		InitializeCriticalSection(&positioned_lock);
+		InterlockedExchange(&positioned_lock_state, 2);
+	}
+	while (positioned_lock_state != 2)
+		Sleep(0);
+	EnterCriticalSection(&positioned_lock);
+}
+
+typedef BOOL (WINAPI *file_transfer_proc)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+
+static BOOL positioned_transfer(file_transfer_proc transfer, HANDLE file, LPVOID buffer, DWORD count,
+	LPDWORD transferred, LPOVERLAPPED overlapped, BOOL reading)
+{
+	DWORD done = 0;
+	LONG high;
+	BOOL result;
+	DWORD error;
+
+	positioned_lock_enter();
+	high = (LONG)overlapped->OffsetHigh;
+	if (SetFilePointer(file, (LONG)overlapped->Offset, &high, FILE_BEGIN) == INVALID_SET_FILE_POINTER &&
+		GetLastError() != NO_ERROR)
+	{
+		error = GetLastError();
+		LeaveCriticalSection(&positioned_lock);
+		SetLastError(error);
+		return FALSE;
+	}
+	result = transfer(file, buffer, count, &done, NULL);
+	error = GetLastError();
+	LeaveCriticalSection(&positioned_lock);
+	if (transferred)
+		*transferred = done;
+	overlapped->Internal = result ? ERROR_SUCCESS : error;
+	overlapped->InternalHigh = done;
+	/* (as Windows NT's: a positioned read at the end of the file fails) */
+	if (result && reading && done == 0 && count > 0)
+	{
+		overlapped->Internal = ERROR_HANDLE_EOF;
+		SetLastError(ERROR_HANDLE_EOF);
+		return FALSE;
+	}
+	SetLastError(error);
+	return result;
+}
+
+BOOL WINAPI ReadFile(HANDLE file, LPVOID buffer, DWORD count, LPDWORD transferred, LPOVERLAPPED overlapped)
+{
+	SYSTEM_FUNCTION("kernel32.dll", file_transfer_proc, ReadFile);
+
+	if (overlapped && !windows_nt() && GetFileType(file) == FILE_TYPE_DISK)
+		return positioned_transfer(system_ReadFile, file, buffer, count, transferred, overlapped, TRUE);
+	return system_ReadFile(file, buffer, count, transferred, overlapped);
+}
+
+BOOL WINAPI WriteFile(HANDLE file, LPCVOID buffer, DWORD count, LPDWORD transferred, LPOVERLAPPED overlapped)
+{
+	SYSTEM_FUNCTION("kernel32.dll", file_transfer_proc, WriteFile);
+
+	if (overlapped && !windows_nt() && GetFileType(file) == FILE_TYPE_DISK)
+		return positioned_transfer(system_WriteFile, file, (LPVOID)buffer, count, transferred, overlapped, FALSE);
+	return system_WriteFile(file, (LPVOID)buffer, count, transferred, overlapped);
+}

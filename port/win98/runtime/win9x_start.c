@@ -89,8 +89,18 @@ static void log_open(void)
 	win9x_trace(stderr ? "log: halo.log" : "log: none");
 }
 
-/* the entry point (the linker's --entry) */
-void mainCRTStartup(void)
+/* the entry point (the linker's --entry), with EBP cleared: the game's
+stack walk (source/cseries/stack_walk_windows.c, an assert's report) follows
+the frame pointers up until one is 0, and Windows 9x starts a program with
+EBP pointing into its own memory, which the program cannot read */
+__asm__(".globl _mainCRTStartup\n"
+	"_mainCRTStartup:\n"
+	"\txorl %ebp, %ebp\n"
+	"\tjmp _win9x_start\n");
+
+__attribute__((noreturn)) void win9x_start(void);
+
+void win9x_start(void)
 {
 	struct startup_information information = { 0 };
 	int argc;
