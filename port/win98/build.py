@@ -287,6 +287,21 @@ def object_path(source: str) -> Path:
     return OBJ / (name.rsplit(".", 1)[0] + ".o")
 
 
+def strong_references(ir: Path):
+    """a game unit's references to what it does not define, made ordinary
+    ones: the generated halo_msvc_semantics.h names every header inline
+    function #pragma weak (pick-any, as MSVC's COMDATs), which in a unit
+    that only calls one is a weak reference; ELF's linker takes any
+    definition over that, but COFF's makes it a weak external whose default
+    is 0, and lld keeps the first weak external it sees, so a call could go
+    to address 0 instead of msvc_comdat.c's definition"""
+    text = ir.read_text()
+    changed = re.sub(r"^declare extern_weak ", "declare ", text, flags=re.M)
+    changed = re.sub(r"^(@[^ ]+ = )extern_weak ", r"\1external ", changed, flags=re.M)
+    if changed != text:
+        ir.write_text(changed)
+
+
 def compile_unit(job):
     source, flags, hybrid, syntax_only = job
     run = lambda a: subprocess.run(a, cwd=ROOT, capture_output=True, text=True)
@@ -308,6 +323,7 @@ def compile_unit(job):
     r = run([sys.executable, str(HERE / "precision" / "rewrite.py"), str(ir), str(rewritten)])
     if r.returncode:
         return source, "error", r.stderr
+    strong_references(rewritten)
     # (the IR is optimised already: only code generation, which must not
     # move arithmetic across the precision helpers' calls)
     r = run(["clang", *TARGET, "-O2", "-Xclang", "-disable-llvm-optzns", "-c", str(rewritten), "-o", str(obj)])
@@ -349,6 +365,10 @@ def defined_symbols(objects):
     return names
 
 
+MSVCRT_MATH_FUNCTIONS = {"atan2", "ceil", "cos", "exp", "fabs", "floor", "fmod", "frexp", "ldexp", "log", "modf",
+                         "pow", "sin", "sqrt"}
+
+
 def import_libraries(mingw: Path, defined):
     """an import library for each DLL, from mingw-w64's definitions, less
     what the program defines itself (port/win98/src/win9x_compat.c: what
@@ -374,6 +394,14 @@ def import_libraries(mingw: Path, defined):
             bare = re.sub(r"@\d+$", "", symbol)
             if symbol and not symbol.startswith((";", "LIBRARY", "EXPORTS")) and bare in defined:
                 continue
+            # (mingw-w64 marks msvcrt.dll's maths DATA, as its own runtime
+            # library has its own: a DATA import is reached only through
+            # its __imp_ pointer, and a call by name would be auto-imported,
+            # which needs mingw-w64's start-up code to fix it, which the
+            # build does not link: --disable-auto-import, in link(), makes
+            # any other such call an error)
+            if name == "msvcrt" and bare in MSVCRT_MATH_FUNCTIONS:
+                line = re.sub(r"\s+DATA\b", "", line)
             kept.append(line)
         (lib / f"{name}.def").write_text("\n".join(kept) + "\n")
         subprocess.run(["llvm-dlltool", "-m", "i386", "-k", "-d", str(lib / f"{name}.def"),
@@ -393,7 +421,8 @@ def link(objects, lib: Path):
                "-Wl,--entry,_mainCRTStartup", "-Wl,--subsystem,windows:4.0", f"-Wl,-Map={BUILD / 'halo.map'}",
                "-Wl,--major-os-version,4", "-Wl,--minor-os-version,0",
                "-Wl,--disable-dynamicbase", "-Wl,--disable-nxcompat", "-Wl,--build-id=none",
-               "-Wl,--stack,0x800000", "-Wl,--error-limit=0"]
+               "-Wl,--stack,0x800000", "-Wl,--error-limit=0", "-Wl,--disable-auto-import",
+               "-Wl,--disable-runtime-pseudo-reloc"]
     result = subprocess.run(command, capture_output=True, text=True)
     undefined = sorted(set(re.findall(r"undefined symbol: (?:__declspec\(dllimport\) )?(\S+)", result.stderr)))
     with open(BUILD / "undefined.txt", "w") as out:
@@ -406,7 +435,43 @@ def link(objects, lib: Path):
             print(line)
         return False
     print(f"linked {output}")
-    return True
+    return calls_checked(output)
+
+
+def calls_checked(program: Path) -> bool:
+    """every direct call and jump in the program lands in its code: one that
+    does not went to a symbol the link left at 0 (a weak external) or to
+    an import's slot instead of through it (an auto-import, which needs
+    start-up code the build does not have)"""
+    headers = subprocess.run(["llvm-objdump", "-h", str(program)], capture_output=True, text=True).stdout
+    text = re.search(r"\.text\s+([0-9a-f]+)\s+([0-9a-f]+)", headers)
+    start = int(text.group(2), 16)
+    end = start + int(text.group(1), 16)
+    private = subprocess.run(["llvm-objdump", "-p", str(program)], capture_output=True, text=True).stdout
+    base = int(re.search(r"ImageBase\s+([0-9a-f]+)", private).group(1), 16)
+    image_end = base + int(re.search(r"SizeOfImage\s+([0-9a-f]+)", private).group(1), 16)
+
+    # (0, or the program's own data: an import's slot; data in the code
+    # that disassembles as a jump elsewhere is left alone)
+    def bad_target(address):
+        return address == 0 or (base <= address < image_end and not start <= address < end)
+    disassembly = subprocess.run(["llvm-objdump", "-d", "--no-show-raw-insn", str(program)], capture_output=True,
+                                 text=True).stdout
+    function = "?"
+    bad = []
+    for line in disassembly.splitlines():
+        label = re.match(r"^[0-9a-f]+ <(.*)>:", line)
+        if label:
+            function = label.group(1)
+            continue
+        target = re.search(r"\t(?:call|jmp)l?\t0x([0-9a-f]+)", line)
+        if target and bad_target(int(target.group(1), 16)):
+            bad.append(f"{function}: {line.strip()}")
+    for line in bad[:20]:
+        print(f"bad call: {line}")
+    if bad:
+        print(f"{len(bad)} calls land outside the code")
+    return not bad
 
 
 def main() -> None:
