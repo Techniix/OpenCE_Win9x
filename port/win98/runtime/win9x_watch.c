@@ -26,6 +26,10 @@ enum
 static HANDLE trace_file = INVALID_HANDLE_VALUE;
 static HANDLE main_thread;
 static DWORD code_start, code_end;
+/* the main thread's stack's top (found before anything is stopped: on
+Windows 9x, VirtualQuery takes a lock in the system that a stopped thread
+may hold, and both then wait forever) */
+static DWORD stack_top;
 static DWORD started;
 
 static void trace_write(const char *text)
@@ -77,7 +81,6 @@ static DWORD WINAPI watch_thread(LPVOID parameter)
 	for (;;)
 	{
 		CONTEXT context;
-		MEMORY_BASIC_INFORMATION region;
 		DWORD found[WATCH_RETURN_ADDRESSES];
 		DWORD words = 0, count = 0, index;
 		char line[64 + WATCH_RETURN_ADDRESSES * 10];
@@ -90,11 +93,9 @@ static DWORD WINAPI watch_thread(LPVOID parameter)
 			return 0;
 		context.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
 		have_context = GetThreadContext(main_thread, &context);
-		if (have_context && VirtualQuery((void *)context.Esp, &region, sizeof(region)))
+		if (have_context && context.Esp < stack_top && stack_top - context.Esp < 0x1000000)
 		{
-			DWORD top = (DWORD)region.BaseAddress + region.RegionSize;
-
-			words = (top - context.Esp) / 4;
+			words = (stack_top - context.Esp) / 4;
 			if (words > WATCH_STACK_WORDS)
 				words = WATCH_STACK_WORDS;
 			CopyMemory(stack, (void *)context.Esp, words * 4);
@@ -144,6 +145,12 @@ void win9x_watch_start(void)
 	if (trace_file == INVALID_HANDLE_VALUE)
 		return;
 	code_range();
+	{
+		MEMORY_BASIC_INFORMATION region;
+
+		if (VirtualQuery(&region, &region, sizeof(region)))
+			stack_top = (DWORD)region.BaseAddress + region.RegionSize;
+	}
 	{
 		char line[128];
 		OSVERSIONINFOA version;

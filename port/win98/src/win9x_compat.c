@@ -10,6 +10,7 @@ resolve; and the C runtime functions msvcrt.dll of Windows 98 lacks.
 #include <windows.h>
 #include <wincrypt.h>
 #include <errno.h>
+#include <io.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -238,13 +239,30 @@ errno_t __cdecl _gmtime32_s(struct tm *result, const long *time)
 	return 0;
 }
 
+/* (not msvcrt.dll's _chsize, which makes a file longer by writing zeros
+to it: the game sizes its six map cache files, z\cache000.map to
+cache005.map, 732 MB in all, as it starts; SetEndOfFile gives a file its
+clusters without writing them, as the Xbox's did) */
 errno_t __cdecl _chsize_s(int handle, long long size)
 {
-	extern int __cdecl _chsize(int handle, long size);
+	HANDLE file = (HANDLE)_get_osfhandle(handle);
+	LONG high = 0, position_high = 0;
+	DWORD position;
+	errno_t result = 0;
 
-	if (size < 0 || size > 0x7FFFFFFF)
+	if (size < 0 || file == INVALID_HANDLE_VALUE)
 		return EINVAL;
-	return _chsize(handle, (long)size) ? errno : 0;
+	position = SetFilePointer(file, 0, &position_high, FILE_CURRENT);
+	if (position == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR)
+		return EBADF;
+	high = (LONG)(size >> 32);
+	if ((SetFilePointer(file, (LONG)size, &high, FILE_BEGIN) == INVALID_SET_FILE_POINTER &&
+		GetLastError() != NO_ERROR) || !SetEndOfFile(file))
+	{
+		result = GetLastError() == ERROR_DISK_FULL ? ENOSPC : EACCES;
+	}
+	SetFilePointer(file, (LONG)position, &position_high, FILE_BEGIN);
+	return result;
 }
 
 errno_t __cdecl freopen_s(FILE **stream, const char *path, const char *mode, FILE *old_stream)
