@@ -312,17 +312,20 @@ static void preset_chosen(void)
 
 static void detect(void)
 {
+	static int checked;
 	unsigned long speed = measure_megahertz();
 	unsigned long memory = megabytes();
 	int preset = launcher_suggest(speed, memory);
 	char text[160];
 
+	/* (the window checks once as it opens: a click after that says it checked again) */
 	if (speed)
-		sprintf(text, "Found: about %lu MHz, %lu MB of memory. Suggested: %s. (The graphics card is not tested.)",
-			speed, memory, launcher_preset_name(preset));
+		sprintf(text, "%sFound: about %lu MHz, %lu MB of memory. Suggested: %s. (The graphics card is not tested.)",
+			checked ? "Checked again. " : "", speed, memory, launcher_preset_name(preset));
 	else
-		sprintf(text, "Found: %lu MB of memory; the processor's speed is not known. Suggested: %s.", memory,
-			launcher_preset_name(preset));
+		sprintf(text, "%sFound: %lu MB of memory; the processor's speed is not known. Suggested: %s.",
+			checked ? "Checked again. " : "", memory, launcher_preset_name(preset));
+	checked = 1;
 	SetWindowTextA(hardware_text, text);
 	SendMessageA(preset_combo, CB_SETCURSEL, (WPARAM)preset, 0);
 	preset_chosen();

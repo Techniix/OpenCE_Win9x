@@ -45,6 +45,8 @@ enum
 	GOVERNOR_WINDOW_MILLISECONDS = 1000,
 	GOVERNOR_QUIET_WINDOWS = 3
 };
+/* under this share of the wanted rate no level is tried: the picture is not what is slow */
+#define GOVERNOR_HOPELESS_FRACTION 0.125
 
 /* the names halo_render_pass gives in render_window (source/render/render.c) */
 static const char *const skippable_passes[] =
@@ -211,7 +213,10 @@ void halo_render_governor_frame(void)
 		if (rate < wanted * 0.9)
 		{
 			quiet_windows = 0;
-			if (governor_level + manual_level < MAXIMUM_LEVEL)
+			/* a rate this far under is not the picture's: a map loading, or a machine (an emulated one, say)
+			too slow for the game itself, which no level helps and which would only strip the picture
+			(a 0.0 frames a second window lowered two levels on an emulated Cyrix 6x86MX, 14:28 debug.txt) */
+			if (rate >= wanted * GOVERNOR_HOPELESS_FRACTION && governor_level + manual_level < MAXIMUM_LEVEL)
 			{
 				governor_level++;
 				error(_error_silent, "render: %.1f frames a second, under %ld: performance level %d", rate, wanted,
