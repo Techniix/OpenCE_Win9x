@@ -59,13 +59,13 @@ SCREENS = {
     "video_settings": {
         "screen": "video_settings_screen",
         "header": ("header_profile_video_settings", f"{PE}/video_settings/header_profile_video_settings"),
-        # a 28px step (the other screens' 30 would take the desktop's ten
-        # rows into the help: Graphics' is 27). each platform packs its own
+        # a 27px step, as Graphics' (the other screens' 30 would take the
+        # desktop's eleven rows into the help). each platform packs its own
         # rows, so a row hidden on this machine does not leave a gap
-        "spacing": 28,
-        # (below the desktop's last row, 353: its two lines clear of the
-        # buttons, 414)
-        "help_top": 358, "help_height": 54,
+        "spacing": 27,
+        # (below the desktop's last row, Performance's, 343: its two lines
+        # clear of the buttons, 414)
+        "help_top": 372, "help_height": 40,
         "platform_places": True,
         # (rows in the place of the row before them: Window Size in
         # Resolution's, port/linux/game/menu_functions.c showing the one the
@@ -323,12 +323,34 @@ SCREENS["video_settings/hdr_calibration"] = {
     ],
 }
 _video["rows"] = [row for row in _video["rows"] if row[1] not in _graphics | _extra_effects]
+# the passes Performance can leave out, in steps (render.skip_passes,
+# port/linux/game/render_policy.c): the shiny extras, then the shadows and
+# the decals, then the fog; each step takes the ones before it. A list the
+# file holds that is not one of these shows as Off
+_SKIP_SHINY = "lights_specular,bsp_specular_lightmaps,bsp_reflection_masks,bsp_reflection_mirrors,bsp_reflections"
+_SKIP_SOME = _SKIP_SHINY + ",object_shadows,decals_light,decals_alpha_tested,detail_objects"
+_SKIP_MOST = _SKIP_SOME + ",decals_primary,decals_secondary,decals_water,bsp_fog,fog_screen"
+SCREENS["video_settings/performance"] = {
+    "screen": "performance_settings_screen", "header": _video["header"], "spacing": 30,
+    "rows": [
+        ("EXTRAS DRAWN:", "render.skip_passes",
+         [("ALL", ""), ("NO SHINE", _SKIP_SHINY), ("FEWER", _SKIP_SOME), ("BARE", _SKIP_MOST)],
+         "Leave out passes for a slower machine: shine and\nreflections, then shadows and decals, then fog.", None),
+        ("OBJECT DETAIL:", "render.lod_scale",
+         [("FULL", "1"), ("75%", "0.75"), ("50%", "0.5"), ("35%", "0.35"), ("25%", "0.25"), ("15%", "0.15")],
+         "Objects use their coarser models sooner, and small\nfar ones vanish. Full: as the game chooses.", None),
+        ("VISIBILITY:", "render.visibility", [("PORTALS", "portals"), ("PVS", "pvs")],
+         "Which rooms are drawn. Portals: those the doors\nshow. PVS: the map's stored set; a lighter search.", None),
+    ],
+}
 _video["categories"] = [
     ("GRAPHICS:", "video_settings/graphics", "The HUD, text, anti-aliasing, shadows,\nlighting and HDR."),
     ("FOV AND VIEWMODELS:", "video_settings/fov_viewmodels",
      "The field of view and the first-person\nweapon. Their defaults keep the stock view."),
     ("EXTRA EFFECTS:", "video_settings/extra_effects",
      "Visual modifiers the stock game does not\nhave, such as the shield glow."),
+    ("PERFORMANCE:", "video_settings/performance",
+     "Leave out or simplify what the picture draws,\nfor a slower machine. The game is unchanged."),
 ]
 SCREENS["video_settings/fov_viewmodels"] = {
     "screen": "fov_viewmodel_settings_screen", "header": _video["header"], "spacing": 30,
