@@ -162,6 +162,16 @@ static void gl_report(void)
 	}
 }
 
+/* the start-up (port/win98/runtime/win9x_start.c) shows the game's setup window
+first; this program is not the game, and has none (its settings are the
+game's, port/win98/launcher) */
+int win9x_launcher_run(int *argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	SDL_Window *window;

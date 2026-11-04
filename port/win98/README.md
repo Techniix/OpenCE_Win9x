@@ -15,6 +15,7 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
 | Compiling and linking (`build.py`, `include/`, `src/`, `runtime/`) | All 900 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers, and link into build/win98/halo.exe: the game through hybrid precision, the Windows build's platform layer, the third-party libraries, and what Windows 9x lacks (below). Runs on Windows 98 SE (86Box: VIA Cyrix III, 128 MB) without drawing: loads ui.map and the main menu, plays its music to no device, and quits on time (first runs, below). |
 | SDL 3 | `port/retro_sdl`: the SDL 3 functions the platform layer calls, on Win32 (Windows 95 and later). Its time, threads, files and events run; its window, OpenGL and sound not yet. |
+| Setup window | `launcher/`: sliders and toggles (user32 only) before the game opens; below. Its choices are tested apart from the window (`launcher/test/launcher_test.py`); the window itself has not been run on a Windows 9x machine. |
 | OpenGL 1.1 renderer | `port/retro_gl`: Direct3D 8 on OpenGL 1.1 in place of the OpenGL 4.5 renderer (its README). First version, not yet run: the vertex programs on the processor, textures fitted to the card, the pixel shaders approximate. |
 
 ## Maths: hybrid precision
@@ -110,6 +111,33 @@ beavercreek, sidewinder and damnation, each build hosting in turn: 8 of 8
 games in step, positions apart by 0.04-0.06 world units on average and the
 mismatched seconds (grenades, rounds) within the netcode's round trip, as
 between identical builds (port/linux/NETCODE.md, "Comparing two builds").
+
+## The setup window
+
+`launcher/win9x_launcher.c` shows a window before the game starts, with
+sliders (picture size, object detail, extras drawn, frame rate limit),
+toggles (V-Sync, smooth motion, PVS visibility, reverb, fast sound mixing,
+sound) and a display mode. It uses only user32's classes (the trackbar is
+comctl32's, which an early Windows 95 lacks, so the sliders are scroll
+bars). "Detect this PC" times the processor (`rdtsc` over 60 ms) and reads
+the memory, and suggests one of four presets: Fastest, Fast, Balanced,
+Best. The graphics card is not tested.
+
+It comes up:
+
+- on the first run (`launcher.configured` false);
+- when Shift is held as `halo.exe` starts, or with `--setup`: `SETUP.BAT`
+  (`tools/SETUP.BAT`) is that, for a shortcut;
+- when `launcher.show_next_start` or `launcher.always` is true;
+- after a run that did not end normally: a run leaves `halo_running.flag`
+  beside `halo.exe` and removes it on exit, so a crash or a hang leaves it,
+  and the window says so. This is how a setting that stops the game from
+  starting can be taken back.
+
+`HALO_NO_LAUNCHER` and `--no-setup` skip it, as does a dedicated server.
+Its sliders write the same settings, in the same steps, as Video Setup,
+Performance in the game (`tools/port_settings.py`); `launcher_test.py`
+checks that the lists of passes agree.
 
 ## Building
 

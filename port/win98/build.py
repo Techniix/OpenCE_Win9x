@@ -222,6 +222,10 @@ def platform_units(system, sdl: Path):
     # what Windows 9x has only on NT: the wide-character functions, security
     units.append(("port/win98/src/win9x_unicode.c", win32, False))
     units.append(("port/win98/src/win9x_precision.c", win32, False))
+    # the setup window of the first run (user32 only), and the settings it stands for
+    launcher = win32 + ["-Iport/win98/launcher"]
+    units.append(("port/win98/launcher/win9x_launcher.c", launcher, False))
+    units.append(("port/win98/launcher/win9x_launcher_logic.c", launcher, False))
     # the C runtime under the Linux build's names, which the game's units
     # call; what Windows 98's msvcrt.dll and ws2_32.dll lack
     units.append(("port/win98/src/win9x_linux_crt.c", win32, False))

@@ -10,6 +10,7 @@ newer). The entry point:
 - sends stderr, the game's log, to halo.log beside halo.exe (the program's
   name, .log; a program for the Windows subsystem has no console);
 - gets the command line from msvcrt.dll (__getmainargs);
+- shows the setup window when it is due (port/win98/launcher/win9x_launcher.c);
 - runs main, which runs the static constructors first (__main, which clang
   calls at main's start on the GNU target), and exits with what it returns.
 The constructors are the ones lld lists from the objects' .ctors sections,
@@ -40,6 +41,8 @@ extern int __getmainargs(int *argc, char ***argv, char ***environment, int wildc
 extern void __set_app_type(int type);
 extern void x87_precision_single(void);
 extern int main(int argc, char **argv);
+/* the setup window (port/win98/launcher): 0 to go on to the game */
+extern int win9x_launcher_run(int *argc, char **argv);
 
 static void destructors_run(void)
 {
@@ -116,6 +119,9 @@ void win9x_start(void)
 	__getmainargs(&argc, &argv, &environment, 0, &information);
 	log_open();
 	__main();
+	/* (the setup window: the first run's, or when asked for or needed) */
+	if (win9x_launcher_run(&argc, argv))
+		exit(0);
 	win9x_trace("main");
 	exit(main(argc, argv));
 }

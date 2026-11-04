@@ -100,6 +100,14 @@ static const struct config_setting config_settings[] =
 	{ "display.fullscreen", _config_boolean, "true", "HALO_FULLSCREEN", _environment_value, _platform_desktop,
 		"Where display.mode is empty: start borderless over the whole display;\n"
 		"false starts in a window. F11 switches." },
+	{ "launcher.configured", _config_boolean, "false", "HALO_LAUNCHER_CONFIGURED", _environment_value, _platform_all,
+		"Whether the Windows 9x build's setup window has been shown and accepted; false shows it at the\n"
+		"next start. Other builds do not use it." },
+	{ "launcher.always", _config_boolean, "false", "HALO_LAUNCHER_ALWAYS", _environment_value, _platform_all,
+		"Show the Windows 9x build's setup window at every start. Shift held as the program starts, or\n"
+		"--setup (SETUP.BAT), shows it once; so does a run that did not end normally." },
+	{ "launcher.show_next_start", _config_boolean, "false", "HALO_LAUNCHER_NEXT", _environment_value, _platform_all,
+		"Show the Windows 9x build's setup window at the next start only." },
 	{ "render.skip_passes", _config_string, "\"\"", "HALO_RENDER_SKIP_PASSES", _environment_value, _platform_all,
 		"Comma-separated passes of a frame not to draw, for a slow machine: object_shadows, lights_specular,\n"
 		"bsp_specular_lightmaps, bsp_reflection_masks, bsp_reflection_mirrors, bsp_reflections, bsp_fog,\n"
