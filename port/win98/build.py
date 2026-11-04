@@ -226,6 +226,8 @@ def platform_units(system, sdl: Path):
     launcher = win32 + ["-Iport/win98/launcher"]
     units.append(("port/win98/launcher/win9x_launcher.c", launcher, False))
     units.append(("port/win98/launcher/win9x_launcher_logic.c", launcher, False))
+    # halo.exe --selftest: the tunnel's cryptography against the standards' vectors, the clocks, the network
+    units.append(("port/win98/launcher/win9x_selftest.c", launcher + ["-Iport/linux/src"], False))
     # the C runtime under the Linux build's names, which the game's units
     # call; what Windows 98's msvcrt.dll and ws2_32.dll lack
     units.append(("port/win98/src/win9x_linux_crt.c", win32, False))

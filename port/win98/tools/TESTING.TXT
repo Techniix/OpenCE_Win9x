@@ -1,0 +1,145 @@
+HALO FOR WINDOWS 9X: WHAT TO TEST, AND IN WHAT ORDER
+=====================================================
+Everything below is written for the files on the CD (the CD) copied into one
+folder on the machine (copy them all beside halo.exe; a CD is read-only, so copy,
+do not run from it). Do the VM first, then the desktop. Send me back, from the
+game's folder: SELFTEST.TXT, import_check.txt, BENCH.TXT, HALO.log (and halo_trace /
+debug.txt if a crash left them), plus screenshots of anything that looks wrong.
+
+What has and has not been checked (so you know how much to trust each part):
+- Checked on the build machine: it compiles and links for Windows 9x, the
+  setup window's logic, the frame budget's maths, and the internet play
+  cryptography against the published test vectors.
+- NOT checked on any real or emulated Windows 9x yet: everything below. Each
+  step says what should happen. Anything else is a finding; write it down.
+
+---------------------------------------------------------------------
+STEP 1  (2 min)  SELFTEST.BAT
+---------------------------------------------------------------------
+Run SELFTEST.BAT. A box says "N failed, M warnings". Open SELFTEST.TXT.
+ - Every line near the top ("the numbers internet play seals its tunnel with")
+   must say "pass". A FAIL there means the processor or compiler breaks the
+   cryptography, and internet joins cannot work on that machine: send it back.
+ - "clocks agree" must pass. If not, frame-rate numbers on that machine are
+   not trustworthy (common in emulators).
+ - "broker" lines: any ONE reached is enough. "warn" for the others is fine.
+ - "STUN" lines and "NAT type": this decides whether joining over the internet
+   can work. "the same port to every server" is good. "a different port for each
+   server" (a symmetric NAT) means the join cannot get through by itself; use
+   Direct Link (step 7). In 86Box, SLiRP networking is a NAT of its own on top
+   of your router's, which is the likeliest reason a listed game would not
+   connect. Try the PCap / bridged adapter instead.
+ - "gamma ramp" pass means the Brightness slider will work. "display modes"
+   must list 640x480.
+
+---------------------------------------------------------------------
+STEP 2  (3 min)  TESTALL.BAT
+---------------------------------------------------------------------
+Runs the self test, import_check (a box to click OK at the end of each; are all the system functions the game calls
+present on this Windows?) and 30 seconds of the game with timing on.
+ - import_check.txt should list nothing missing. Anything listed is a game feature
+   that will fail on that Windows version.
+ - HALO.log: lines starting "budget:" say where each frame's time went, and
+   "the audio mixer ... used N% of real time". Over 60% for the mixer means
+   lower the sound quality (step 5).
+
+---------------------------------------------------------------------
+STEP 3  (20 min)  BENCHALL.BAT  (start it, walk away)
+---------------------------------------------------------------------
+Runs 22 settings one after another, about 40 seconds each; nothing to click.
+When it says done, copy BENCH.TXT (one line per run: name, frames a second,
+ms a frame, audio mixer %, biggest steps). Run it on the VM and on the desktop
+(rename the file between: BENCH_vm.TXT, BENCH_desktop.TXT). Close everything else
+first. It measures the main menu's moving backdrop (renderer, clock, sound),
+NOT a level; the game's own AI/animation cost needs step 6.
+If a run stops partway (a crash), HALO.log and the last name in BENCH.TXT say
+which setting did it.
+
+---------------------------------------------------------------------
+STEP 4  (15 min)  The setup window  (SETUP.BAT)
+---------------------------------------------------------------------
+Look at each, tick off or write what happened:
+ [ ] The window fits on a 640x480 desktop with nothing cut off (try that
+     desktop size in Display Properties).
+ [ ] Detect this PC: fills in a preset and a one-line advice text.
+ [ ] The four presets (Fastest, Fast, Balanced, Best) change the sliders.
+ [ ] Benchmark button: the game starts, runs 30 s, ends by itself, and the
+     window comes back with a frame rate and advice. Settings are restored.
+ [ ] Save and Play starts the game with the chosen settings; the next start
+     skips the window (hold Shift at launch to bring it back).
+ [ ] Close the game with Ctrl+Alt+Del (End Task), start again: the window appears with
+     "did not close normally".
+ [ ] The pointer is a coloured arrow (32x32), the window and taskbar show the
+     icon.
+
+---------------------------------------------------------------------
+STEP 5  (20 min)  In the game, menus
+---------------------------------------------------------------------
+ [ ] Ctrl+Minus / Ctrl+Equals: a line at the top left says "Detail: level N of
+     6" and the picture gets simpler/fuller. "Detail: full" is the best picture.
+ [ ] Video Setup > Performance: Extras Drawn, Object Detail, Visibility,
+     Keep Up, Texture Detail, Brightness all change and persist after a restart.
+ [ ] Brightness (gamma): moving it changes the whole screen's brightness
+     and it goes back to normal when the game is closed. (If the desktop stays
+     dark or washed out afterwards, that is a bug: write down which card.)
+ [ ] Texture Detail: Half, Quarter, Eighth visibly blur the textures and use
+     less video memory (menus may still look sharp).
+ [ ] Keep Up: set 30 and watch the "Detail" line move when the frame rate
+     falls short, and come back when it recovers.
+ [ ] Audio settings > Sound Processing: Resampler (Sinc / Linear / Auto),
+     Sinc Voices (2..24), Sample Rate (11 - 48 kHz), Reverb. At each Sample
+     Rate: music plays at the right speed (not slow/fast), no crackle. Write
+     down the lowest rate that sounds clean with your card.
+ [ ] Play the menu music for 5 minutes at the lowest and the highest sound
+     quality: no stutter, no drifting out of time.
+
+---------------------------------------------------------------------
+STEP 6  (30 min)  In a level
+---------------------------------------------------------------------
+The batch benchmark does not enter a level. Do this by hand once per preset
+(Fastest, Balanced, Best): New Campaign, first level; walk through the first
+room and into the first fight. Run with BUDGET.BAT (writes "budget:" lines
+every 10 s to HALO.log) so I can see the simulation's cost. Note: frame
+rate by feel, any visual glitch (missing walls, flicker, wrong colours, black
+textures), any sound problem, any crash.
+ [ ] Ctrl+Minus/Equals work in the level.
+ [ ] Shadows, shine, decals disappear/reappear with the Extras Drawn setting.
+ [ ] Quit to the menu and start a second level (memory not leaking: the
+     second level should load as fast as the first).
+
+---------------------------------------------------------------------
+STEP 7  (20 min)  Multiplayer  (this is the part that failed before)
+---------------------------------------------------------------------
+Needs a second machine running a current OpenCE client or server. Compatibility
+with it is required: if a modern client cannot join your game, or you cannot
+join its, that is the bug to report.
+A. Join Game > Server Browser: the list fills (it did before). Pick a game,
+   press A. Note what the line under the list says as it goes: it moves
+   through asking, answered, connected. Then either you are in the lobby, or
+   one of: "no answer", "no route", "strict NAT", a refusal word (full, closed,
+   version...). Write down exactly which. HALO.log has "Internet play:" lines
+   and a "network: the error shown at the main menu is ..." line for the
+   system link error: send that file.
+B. Direct Link (Join Game > Direct Link): enter the other machine's address
+   (on the same LAN: its LAN address, e.g. 192.168.1.20). This needs no
+   brokers, STUN or hole punching. If this works and the browser does not,
+   the problem is the route through the network (NAT), not the game.
+   For the VM, 86Box needs its network card set to PCap/bridged (not SLiRP)
+   for another machine to reach it.
+C. Host a game on the Windows 98 machine and have the modern client join it
+   (LAN first, then internet). Play a minute each way: movement, shooting,
+   vehicles, chat. Both sides must see the same thing.
+D. A crash or "out of sync" in a game: send HALO.log from BOTH machines.
+
+---------------------------------------------------------------------
+STEP 8  (10 min)  Desktop-only comparison
+---------------------------------------------------------------------
+Your desktop ran the pre-change build well. Run BENCHALL.BAT and TESTALL.BAT
+on it. If you still have the old halo.exe, run it with BUDGET.BAT's settings
+in the main menu for 30 s and compare "frames a second" against the "best"
+preset line in BENCH.TXT: they should be about the same (the new code is
+render-only and should cost almost nothing at the Best preset). A big drop
+is a regression: send both HALO.log files.
+
+What to send back when you are done: the files above, and a short list of
+the [ ] boxes that did not behave as described.

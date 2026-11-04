@@ -29,6 +29,9 @@ The settings it writes and reads are in win9x_launcher_logic.c.
 #include <string.h>
 
 #include "win9x_launcher_logic.h"
+
+/* win9x_selftest.c: halo.exe --selftest (SELFTEST.BAT) */
+int win9x_selftest_run(void);
 #include "../../linux/src/port_config.h"
 
 /* ---------- constants */
@@ -810,7 +813,7 @@ static int benchmark_undo(void)
 
 int win9x_launcher_run(int *argc, char **argv)
 {
-	int index, out = 1, force = 0, skip = 0, ran_before_unfinished = 0;
+	int index, out = 1, force = 0, skip = 0, ran_before_unfinished = 0, selftest = 0;
 	char notice[200];
 	char flag[MAX_PATH];
 	struct launcher_choices choices;
@@ -823,6 +826,8 @@ int win9x_launcher_run(int *argc, char **argv)
 			force = 1;
 		else if (!_stricmp(argv[index], "--no-setup"))
 			skip = 1;
+		else if (!_stricmp(argv[index], "--selftest"))
+			selftest = 1;
 		else
 		{
 			if (!_stricmp(argv[index], "--server"))
@@ -832,6 +837,11 @@ int win9x_launcher_run(int *argc, char **argv)
 	}
 	argv[out] = NULL;
 	*argc = out;
+	if (selftest)
+	{
+		win9x_selftest_run();
+		return 1;
+	}
 	/* (a benchmark that did not end has left its settings: taken back first, with the window to follow) */
 	undone = benchmark_undo();
 	if (skip || getenv("HALO_NO_LAUNCHER") || config_server_mode_enabled())

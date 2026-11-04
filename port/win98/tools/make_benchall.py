@@ -102,7 +102,7 @@ def write(path, seconds):
         ]
         lines += ["", "echo %s" % label]
         lines += ["set %s=%s" % (names[k], v) for k, v in values]
-        lines.append("halo.exe")
+        lines.append("halo.exe --no-setup")
     lines += ["", "echo done. Copy BENCH.TXT and HALO.log.", "pause", ""]
     minutes = len(all_runs) * (seconds + 15) / 60.0
     lines[2] = "rem About %d minutes (%d runs of %d seconds, and the game's start each). Leave the machine alone; copy BENCH.TXT and HALO.log when it says done." % (

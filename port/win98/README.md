@@ -263,3 +263,13 @@ first_boot.toml to config.toml and clear its read-only attribute
 5. With draw_test.toml as config.toml, halo.exe draws (port/retro_gl) in a
    640x480 window, with sound; halo.log lists the OpenGL driver and each
    pixel shader the game uses.
+
+## Testing on a machine
+
+`halo.exe --selftest` (`SELFTEST.BAT`) writes `SELFTEST.TXT`: internet play's cryptography against the
+standards' test vectors on this processor (`port/linux/src/p2p_selftest.c`; the same code runs on the host in
+`port/linux/tests/p2p_selftest_test.py`), the clocks, loopback sockets, the brokers, what the STUN servers
+see of the machine (can hole punching reach it), the sound formats, the gamma ramp and the display modes
+(`port/win98/launcher/win9x_selftest.c`). `TESTALL.BAT` adds `import_check` and a 30 second timed run;
+`BENCHALL.BAT` (written by `port/win98/tools/make_benchall.py`) runs 22 settings into `BENCH.TXT`
+(`debug.bench_label`). `TESTING.TXT` is the step-by-step list for a person at the machine.

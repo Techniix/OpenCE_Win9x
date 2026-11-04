@@ -222,6 +222,11 @@ int p2p_equal(const void *first, const void *second, int size);
 key of the secret key scalar) */
 void p2p_x25519(unsigned char *result, const unsigned char *scalar, const unsigned char *point);
 
+/* p2p_selftest.c: the known-answer tests of the above (the standards' test vectors), then the
+machine's random numbers; report(name, passed, context) for each; returns the number that failed */
+typedef void (*p2p_selftest_report)(const char *name, int passed, void *context);
+int p2p_selftest(p2p_selftest_report report, void *context);
+
 enum
 {
 	/* an Ed25519 seed (a run's key comes from one) and signature */

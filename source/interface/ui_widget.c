@@ -1974,6 +1974,20 @@ boolean filesystem_check_thread_is_active(
 void display_error_when_main_menu_loaded(
 	short error_code)
 {
+	/* port: the network errors say in the log which one the player is shown (these have no
+	text of their own in the log; a join that fails after the tunnel is up ends here) */
+	{
+		extern void platform_log(char const *format, ...);
+		static char const *const names[] =
+		{
+			"unknown", "network generic", "join game closed", "join game generic", "server shut down",
+			"connected play no network", "connection lost", "failed to join game", "out of sync",
+			"trouble is brewing"
+		};
+
+		if (error_code >= 0 && error_code < (short)(sizeof(names) / sizeof(names[0])))
+			platform_log("network: the error shown at the main menu is \"%s\" (%d)", names[error_code], error_code);
+	}
 	if (widget_globals.main_menu_deferred_error_code == NONE)
 	{
 		widget_globals.main_menu_deferred_error_code = error_code;
