@@ -568,8 +568,23 @@ struct SDL_Window
 
 static SDL_Window *the_window;
 
-/* the drawable's one size (RETRO_SDL_HINT_GL_FIXED_SIZE), 0 for any */
+/* the drawable's one size (RETRO_SDL_HINT_GL_FIXED_SIZE), 0 for any; and
+whether an OpenGL context has been made, after which the display's mode is
+not changed (the Voodoo3's ICD then draws with the old mode's pitch) */
 static int fixed_width, fixed_height;
+static bool context_made;
+
+static bool fixed_size_read(void)
+{
+	const char *size = retro_sdl_hint(RETRO_SDL_HINT_GL_FIXED_SIZE);
+	int width = 0, height = 0;
+
+	if (!size || sscanf(size, "%dx%d", &width, &height) != 2 || width <= 0 || height <= 0)
+		return false;
+	fixed_width = width;
+	fixed_height = height;
+	return true;
+}
 
 /* ---------- events: a queue */
 
@@ -872,7 +887,7 @@ static bool fullscreen_apply(SDL_Window *window, bool fullscreen)
 		SDL_DisplayMode fixed_mode;
 
 		desktop_mode_read();
-		if (fixed_width > 0 && !window->fullscreen_mode_set)
+		if (fixed_width > 0)
 		{
 			fixed_mode = desktop_mode;
 			fixed_mode.w = fixed_width;
@@ -959,6 +974,13 @@ SDL_Window *SDL_CreateWindow(const char *title, int width, int height, SDL_Windo
 		return NULL;
 	}
 	window->flags = flags & (SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
+	if (fixed_size_read())
+	{
+		window->flags &= ~SDL_WINDOW_RESIZABLE;
+		flags &= ~SDL_WINDOW_RESIZABLE;
+		width = fixed_width;
+		height = fixed_height;
+	}
 	style = window_style(false, flags);
 	frame.left = 0;
 	frame.top = 0;
@@ -1103,6 +1125,11 @@ bool SDL_SetWindowFullscreen(SDL_Window *window, bool fullscreen)
 {
 	if (!window)
 		return SDL_SetError("no window");
+	/* (with the drawable's size fixed, fullscreen is chosen before the
+	context is made, at start: changing the display's mode under it leaves
+	the Voodoo3's ICD drawing with the old mode's pitch) */
+	if (fixed_width > 0 && context_made && fullscreen != ((window->flags & SDL_WINDOW_FULLSCREEN) != 0))
+		return SDL_SetError("fullscreen changes when the game starts again");
 	return fullscreen_apply(window, fullscreen);
 }
 
@@ -1293,21 +1320,15 @@ bool SDL_GL_SetAttribute(SDL_GLAttr attribute, int value)
 /* the window kept at the drawable's one size, when the hint gives one */
 static void window_size_fix(SDL_Window *window)
 {
-	const char *size = retro_sdl_hint(RETRO_SDL_HINT_GL_FIXED_SIZE);
-	int width = 0, height = 0;
+	int width, height;
 
-	if (!size || sscanf(size, "%dx%d", &width, &height) != 2 || width <= 0 || height <= 0)
+	if (!fixed_size_read())
 		return;
-	fixed_width = width;
-	fixed_height = height;
+	width = fixed_width;
+	height = fixed_height;
 	window->flags &= ~SDL_WINDOW_RESIZABLE;
 	if (window->flags & SDL_WINDOW_FULLSCREEN)
-	{
-		/* (already fullscreen at the desktop's size: that size's mode now) */
-		if (!window->fullscreen_mode_set && (current_mode.w != width || current_mode.h != height))
-			fullscreen_apply(window, true);
 		return;
-	}
 	if (IsZoomed(window->handle))
 		ShowWindow(window->handle, SW_RESTORE);
 	SetWindowLongA(window->handle, GWL_STYLE, (LONG)(window_style(false, window->flags) |
@@ -1370,6 +1391,7 @@ SDL_GLContext SDL_GL_CreateContext(SDL_Window *window)
 		return NULL;
 	}
 	window_size_fix(window);
+	context_made = true;
 	return (SDL_GLContext)context;
 }
 

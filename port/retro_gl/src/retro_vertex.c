@@ -119,6 +119,25 @@ void retro_vertex_program_decode(struct retro_vertex_program *program, const DWO
 		operand_decode(instruction, 'A', &decoded->a);
 		operand_decode(instruction, 'B', &decoded->b);
 		operand_decode(instruction, 'C', &decoded->c);
+		switch (decoded->mac)
+		{
+		case _mac_nop:
+			break;
+		case _mac_mov: case _mac_arl:
+			decoded->reads |= 1;
+			break;
+		case _mac_add:
+			decoded->reads |= 1 | 4;
+			break;
+		case _mac_mad:
+			decoded->reads |= 1 | 2 | 4;
+			break;
+		default:
+			decoded->reads |= 1 | 2;
+			break;
+		}
+		if (decoded->ilu != _ilu_nop)
+			decoded->reads |= 4;
 		decoded->captures_clip = decoded->ilu == _ilu_rcc && decoded->c.mux == _mux_temporary &&
 			decoded->c.index == POSITION_REGISTER;
 		/* (only the outputs the device reads: a write elsewhere is none) */
@@ -319,6 +338,8 @@ void retro_vertex_run(const struct retro_vertex_program *program, const struct r
 			const float *source;
 			long constant;
 
+			if (!(instruction->reads & (1 << which)))
+				continue;
 			switch (operand->mux)
 			{
 			case _mux_temporary:

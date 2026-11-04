@@ -547,7 +547,18 @@ HRESULT WINAPI Direct3D_CreateDevice(UINT adapter, D3DDEVTYPE device_type, void 
 		draws with: port/retro_sdl) */
 		SDL_SetHint("RETRO_SDL_GL_MINIMUM_DEPTH", "16");
 		SDL_SetHint("RETRO_SDL_GL_MINIMUM_STENCIL", "8");
-		SDL_SetHint("RETRO_SDL_GL_FIXED_SIZE", "640x480");
+		/* (the window's one size: the screen's, or smaller by
+		display.resolution_scaling, which these cards' fill rate likes) */
+		{
+			const char *scaling = config_string("display.resolution_scaling");
+			int percent = !scaling ? 100 : !strcmp(scaling, "75%") ? 75 : !strcmp(scaling, "50%") ? 50 :
+				!strcmp(scaling, "25%") ? 25 : 100;
+			char size[32];
+
+			snprintf(size, sizeof(size), "%dx%d", SCREEN_WIDTH * percent / 100, SCREEN_HEIGHT * percent / 100);
+			SDL_SetHint("RETRO_SDL_GL_FIXED_SIZE", size);
+			platform_log("Direct3D: the window is kept at %s (display.resolution_scaling)", size);
+		}
 		if (!config_boolean("debug.null_renderer") && platform_video_initialize(SCREEN_WIDTH, SCREEN_HEIGHT))
 			gl_initialize();
 		else

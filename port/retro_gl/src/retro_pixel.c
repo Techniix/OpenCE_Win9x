@@ -419,17 +419,49 @@ static int stage_kind(const struct retro_vertex *vertex, int stage)
 
 void retro_pixel_vertex_colors(struct retro_vertex *vertices, unsigned long count)
 {
-	unsigned long vertex;
+	/* (the combiners' result for the last few inputs: within a draw the
+	constants and textures are the same, and most of its vertices share a
+	color, which saves running the combiners, slow on the processor, for
+	each) */
+	enum { REMEMBERED = 8 };
+	struct
+	{
+		unsigned char diffuse[4], specular[4];
+		float fog;
+		unsigned char result[4];
+	} remembered[REMEMBERED];
+	unsigned long vertex, known = 0, next = 0;
 
 	for (vertex = 0; vertex < count; vertex++)
 	{
+		struct retro_vertex *at = &vertices[vertex];
 		float diffuse[4], specular[4], result[4];
+		unsigned long index;
 		int component;
 
-		vertex_inputs(&vertices[vertex], diffuse, specular);
-		combiners_run(diffuse, specular, vertices[vertex].fog, (const float (*)[4])vertex_textures, result);
+		for (index = 0; index < known; index++)
+		{
+			if (!memcmp(remembered[index].diffuse, at->diffuse, 4) &&
+				!memcmp(remembered[index].specular, at->specular, 4) && remembered[index].fog == at->fog)
+				break;
+		}
+		if (index < known)
+		{
+			memcpy(at->diffuse, remembered[index].result, 4);
+			continue;
+		}
+		index = next;
+		next = (next + 1) % REMEMBERED;
+		if (known < REMEMBERED)
+			known++;
+		memcpy(remembered[index].diffuse, at->diffuse, 4);
+		memcpy(remembered[index].specular, at->specular, 4);
+		remembered[index].fog = at->fog;
+		vertex_inputs(at, diffuse, specular);
+		combiners_run(diffuse, specular, at->fog, (const float (*)[4])vertex_textures, result);
 		for (component = 0; component < 4; component++)
-			vertices[vertex].diffuse[component] = (unsigned char)(result[component] * 255.0f + 0.5f);
+			at->diffuse[component] = (unsigned char)(result[component] * 255.0f + 0.5f);
+		memcpy(remembered[index].result, at->diffuse, 4);
 	}
 }
 

@@ -53,6 +53,8 @@ struct retro_vertex_instruction
 	/* the screen-space conversion's reciprocal of the clip-space w: the
 	position before it is kept (retro_vertex_run) */
 	unsigned char captures_clip;
+	/* the operands the units read (1 A, 2 B, 4 C): the others are not fetched */
+	unsigned char reads;
 	unsigned short constant;
 	unsigned short input;
 	struct retro_vertex_operand a, b, c;
