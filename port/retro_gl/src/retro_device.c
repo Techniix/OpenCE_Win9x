@@ -464,15 +464,15 @@ static void gl_initialize(void)
 		platform_log("Direct3D: this OpenGL lacks what the renderer needs; nothing is displayed");
 		return;
 	}
-	rgl_glMatrixMode(RGL_PROJECTION);
-	rgl_glLoadIdentity();
-	rgl_glMatrixMode(RGL_MODELVIEW);
-	rgl_glLoadIdentity();
-	rgl_glDisable(RGL_LIGHTING);
-	rgl_glDisable(RGL_DITHER);
-	rgl_glHint(RGL_PERSPECTIVE_CORRECTION_HINT, RGL_NICEST);
-	rgl_glEnableClientState(RGL_VERTEX_ARRAY);
-	rgl_glEnableClientState(RGL_COLOR_ARRAY);
+	RGL.rgl_glMatrixMode(RGL_PROJECTION);
+	RGL.rgl_glLoadIdentity();
+	RGL.rgl_glMatrixMode(RGL_MODELVIEW);
+	RGL.rgl_glLoadIdentity();
+	RGL.rgl_glDisable(RGL_LIGHTING);
+	RGL.rgl_glDisable(RGL_DITHER);
+	RGL.rgl_glHint(RGL_PERSPECTIVE_CORRECTION_HINT, RGL_NICEST);
+	RGL.rgl_glEnableClientState(RGL_VERTEX_ARRAY);
+	RGL.rgl_glEnableClientState(RGL_COLOR_ARRAY);
 	device.gl_ready = TRUE;
 	screen_area_update();
 	/* (the textures' pages write-protected, so that a write to one is seen:
@@ -670,7 +670,7 @@ BOOL WINAPI D3DDevice_IsBusy(void)
 void WINAPI D3DDevice_KickPushBuffer(void)
 {
 	if (device.gl_ready)
-		rgl_glFlush();
+		RGL.rgl_glFlush();
 }
 
 void WINAPI D3DDevice_InsertCallback(D3DCALLBACKTYPE type, D3DCALLBACK callback, DWORD context)
@@ -986,76 +986,76 @@ static void raster_state_apply(void)
 
 	screen_rectangle((long)device.viewport.X, (long)device.viewport.Y, (long)device.viewport.Width,
 		(long)device.viewport.Height, viewport);
-	rgl_glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+	RGL.rgl_glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 	/* (the NV2A clips to the viewport: a split screen's windows) */
-	rgl_glScissor(viewport[0], viewport[1], viewport[2], viewport[3]);
-	rgl_glEnable(RGL_SCISSOR_TEST);
-	rgl_glDepthRange(device.viewport.MinZ, device.viewport.MaxZ);
+	RGL.rgl_glScissor(viewport[0], viewport[1], viewport[2], viewport[3]);
+	RGL.rgl_glEnable(RGL_SCISSOR_TEST);
+	RGL.rgl_glDepthRange(device.viewport.MinZ, device.viewport.MaxZ);
 	if (depth_test)
 	{
-		rgl_glEnable(RGL_DEPTH_TEST);
-		rgl_glDepthFunc(rs[D3DRS_ZFUNC] ? (RGLenum)rs[D3DRS_ZFUNC] : RGL_NEVER);
+		RGL.rgl_glEnable(RGL_DEPTH_TEST);
+		RGL.rgl_glDepthFunc(rs[D3DRS_ZFUNC] ? (RGLenum)rs[D3DRS_ZFUNC] : RGL_NEVER);
 	}
 	else
 	{
-		rgl_glDisable(RGL_DEPTH_TEST);
+		RGL.rgl_glDisable(RGL_DEPTH_TEST);
 	}
-	rgl_glDepthMask(depth_test && rs[D3DRS_ZWRITEENABLE] ? RGL_TRUE : RGL_FALSE);
+	RGL.rgl_glDepthMask(depth_test && rs[D3DRS_ZWRITEENABLE] ? RGL_TRUE : RGL_FALSE);
 	if (has_depth && rs[D3DRS_STENCILENABLE] && retro_gl_capabilities.stencil_bits)
 	{
-		rgl_glEnable(RGL_STENCIL_TEST);
-		rgl_glStencilFunc(rs[D3DRS_STENCILFUNC] ? (RGLenum)rs[D3DRS_STENCILFUNC] : RGL_NEVER,
+		RGL.rgl_glEnable(RGL_STENCIL_TEST);
+		RGL.rgl_glStencilFunc(rs[D3DRS_STENCILFUNC] ? (RGLenum)rs[D3DRS_STENCILFUNC] : RGL_NEVER,
 			(RGLint)rs[D3DRS_STENCILREF], rs[D3DRS_STENCILMASK]);
-		rgl_glStencilOp(stencil_operation(rs[D3DRS_STENCILFAIL]), stencil_operation(rs[D3DRS_STENCILZFAIL]),
+		RGL.rgl_glStencilOp(stencil_operation(rs[D3DRS_STENCILFAIL]), stencil_operation(rs[D3DRS_STENCILZFAIL]),
 			stencil_operation(rs[D3DRS_STENCILPASS]));
-		rgl_glStencilMask(rs[D3DRS_STENCILWRITEMASK]);
+		RGL.rgl_glStencilMask(rs[D3DRS_STENCILWRITEMASK]);
 	}
 	else
 	{
-		rgl_glDisable(RGL_STENCIL_TEST);
+		RGL.rgl_glDisable(RGL_STENCIL_TEST);
 	}
 	if (rs[D3DRS_ALPHABLENDENABLE])
 	{
-		rgl_glEnable(RGL_BLEND);
-		rgl_glBlendFunc(blend_factor(rs[D3DRS_SRCBLEND]), blend_factor(rs[D3DRS_DESTBLEND]));
+		RGL.rgl_glEnable(RGL_BLEND);
+		RGL.rgl_glBlendFunc(blend_factor(rs[D3DRS_SRCBLEND]), blend_factor(rs[D3DRS_DESTBLEND]));
 	}
 	else
 	{
-		rgl_glDisable(RGL_BLEND);
+		RGL.rgl_glDisable(RGL_BLEND);
 	}
 	if (rs[D3DRS_ALPHATESTENABLE])
 	{
-		rgl_glEnable(RGL_ALPHA_TEST);
-		rgl_glAlphaFunc(rs[D3DRS_ALPHAFUNC] ? (RGLenum)rs[D3DRS_ALPHAFUNC] : RGL_NEVER,
+		RGL.rgl_glEnable(RGL_ALPHA_TEST);
+		RGL.rgl_glAlphaFunc(rs[D3DRS_ALPHAFUNC] ? (RGLenum)rs[D3DRS_ALPHAFUNC] : RGL_NEVER,
 			(float)(rs[D3DRS_ALPHAREF] & 0xff) / 255.0f);
 	}
 	else
 	{
-		rgl_glDisable(RGL_ALPHA_TEST);
+		RGL.rgl_glDisable(RGL_ALPHA_TEST);
 	}
-	rgl_glColorMask((write & D3DCOLORWRITEENABLE_RED) != 0, (write & D3DCOLORWRITEENABLE_GREEN) != 0,
+	RGL.rgl_glColorMask((write & D3DCOLORWRITEENABLE_RED) != 0, (write & D3DCOLORWRITEENABLE_GREEN) != 0,
 		(write & D3DCOLORWRITEENABLE_BLUE) != 0, (write & D3DCOLORWRITEENABLE_ALPHA) != 0);
 	/* the cull mode names the winding to discard; FRONTFACE names the
 	front winding */
 	if (rs[D3DRS_CULLMODE] != D3DCULL_NONE)
 	{
-		rgl_glEnable(RGL_CULL_FACE);
-		rgl_glFrontFace(rs[D3DRS_FRONTFACE] == D3DFRONT_CCW ? RGL_CCW : RGL_CW);
-		rgl_glCullFace(rs[D3DRS_CULLMODE] == rs[D3DRS_FRONTFACE] ? RGL_FRONT : RGL_BACK);
+		RGL.rgl_glEnable(RGL_CULL_FACE);
+		RGL.rgl_glFrontFace(rs[D3DRS_FRONTFACE] == D3DFRONT_CCW ? RGL_CCW : RGL_CW);
+		RGL.rgl_glCullFace(rs[D3DRS_CULLMODE] == rs[D3DRS_FRONTFACE] ? RGL_FRONT : RGL_BACK);
 	}
 	else
 	{
-		rgl_glDisable(RGL_CULL_FACE);
+		RGL.rgl_glDisable(RGL_CULL_FACE);
 	}
 	if (rs[D3DRS_SOLIDOFFSETENABLE])
 	{
-		rgl_glEnable(RGL_POLYGON_OFFSET_FILL);
-		rgl_glPolygonOffset(retro_dword_to_float(rs[D3DRS_POLYGONOFFSETZSLOPESCALE]),
+		RGL.rgl_glEnable(RGL_POLYGON_OFFSET_FILL);
+		RGL.rgl_glPolygonOffset(retro_dword_to_float(rs[D3DRS_POLYGONOFFSETZSLOPESCALE]),
 			retro_dword_to_float(rs[D3DRS_POLYGONOFFSETZOFFSET]));
 	}
 	else
 	{
-		rgl_glDisable(RGL_POLYGON_OFFSET_FILL);
+		RGL.rgl_glDisable(RGL_POLYGON_OFFSET_FILL);
 	}
 }
 
@@ -1226,26 +1226,26 @@ static void vertices_draw(D3DPRIMITIVETYPE type, unsigned long vertex_count, con
 	retro_pixel_vertex_colors(vertices, vertex_count);
 	if (trace_frame())
 		trace_draw(indices ? "indexed" : "draw", type, indices ? index_count : vertex_count, &setup, vertices);
-	rgl_glVertexPointer(4, RGL_FLOAT, sizeof(*vertices), vertices->position);
+	RGL.rgl_glVertexPointer(4, RGL_FLOAT, sizeof(*vertices), vertices->position);
 	if (setup.diffuse)
 	{
-		rgl_glEnableClientState(RGL_COLOR_ARRAY);
-		rgl_glColorPointer(4, RGL_UNSIGNED_BYTE, sizeof(*vertices), vertices->diffuse);
+		RGL.rgl_glEnableClientState(RGL_COLOR_ARRAY);
+		RGL.rgl_glColorPointer(4, RGL_UNSIGNED_BYTE, sizeof(*vertices), vertices->diffuse);
 	}
 	else
 	{
-		rgl_glDisableClientState(RGL_COLOR_ARRAY);
-		rgl_glColor4ub(255, 255, 255, 255);
+		RGL.rgl_glDisableClientState(RGL_COLOR_ARRAY);
+		RGL.rgl_glColor4ub(255, 255, 255, 255);
 	}
 	for (unit = 0; unit < retro_gl_capabilities.texture_units; unit++)
 	{
 		int stage = setup.unit_stage[unit];
 
-		if (rgl_glClientActiveTextureARB)
-			rgl_glClientActiveTextureARB(RGL_TEXTURE0 + unit);
+		if (RGL.rgl_glClientActiveTextureARB)
+			RGL.rgl_glClientActiveTextureARB(RGL_TEXTURE0 + unit);
 		if (stage < 0)
 		{
-			rgl_glDisableClientState(RGL_TEXTURE_COORD_ARRAY);
+			RGL.rgl_glDisableClientState(RGL_TEXTURE_COORD_ARRAY);
 			continue;
 		}
 		/* (a linear texture's coordinates are in texels: scaled in place,
@@ -1260,15 +1260,15 @@ static void vertices_draw(D3DPRIMITIVETYPE type, unsigned long vertex_count, con
 				vertices[vertex].texture[stage][1] *= setup.texture_scale[unit][1];
 			}
 		}
-		rgl_glEnableClientState(RGL_TEXTURE_COORD_ARRAY);
-		rgl_glTexCoordPointer(4, RGL_FLOAT, sizeof(*vertices), vertices->texture[stage]);
+		RGL.rgl_glEnableClientState(RGL_TEXTURE_COORD_ARRAY);
+		RGL.rgl_glTexCoordPointer(4, RGL_FLOAT, sizeof(*vertices), vertices->texture[stage]);
 	}
-	if (rgl_glClientActiveTextureARB)
-		rgl_glClientActiveTextureARB(RGL_TEXTURE0);
+	if (RGL.rgl_glClientActiveTextureARB)
+		RGL.rgl_glClientActiveTextureARB(RGL_TEXTURE0);
 	if (indices)
-		rgl_glDrawElements(primitive_mode(type), (RGLsizei)index_count, RGL_UNSIGNED_SHORT, indices);
+		RGL.rgl_glDrawElements(primitive_mode(type), (RGLsizei)index_count, RGL_UNSIGNED_SHORT, indices);
 	else
-		rgl_glDrawArrays(primitive_mode(type), 0, (RGLsizei)vertex_count);
+		RGL.rgl_glDrawArrays(primitive_mode(type), 0, (RGLsizei)vertex_count);
 }
 
 void WINAPI D3DDevice_SetStreamSource(UINT stream_number, D3DVertexBuffer *stream_data, UINT stride)
@@ -1469,33 +1469,33 @@ void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags,
 	retro_color_to_floats(color, rgba);
 	if (flags & D3DCLEAR_TARGET)
 	{
-		rgl_glColorMask((flags & D3DCLEAR_TARGET_R) != 0, (flags & D3DCLEAR_TARGET_G) != 0,
+		RGL.rgl_glColorMask((flags & D3DCLEAR_TARGET_R) != 0, (flags & D3DCLEAR_TARGET_G) != 0,
 			(flags & D3DCLEAR_TARGET_B) != 0, (flags & D3DCLEAR_TARGET_A) != 0);
-		rgl_glClearColor(rgba[0], rgba[1], rgba[2], rgba[3]);
+		RGL.rgl_glClearColor(rgba[0], rgba[1], rgba[2], rgba[3]);
 		mask |= RGL_COLOR_BUFFER_BIT;
 	}
 	if (device.depth_stencil && (flags & D3DCLEAR_ZBUFFER))
 	{
-		rgl_glDepthMask(RGL_TRUE);
-		rgl_glClearDepth(z);
+		RGL.rgl_glDepthMask(RGL_TRUE);
+		RGL.rgl_glClearDepth(z);
 		mask |= RGL_DEPTH_BUFFER_BIT;
 	}
 	if (device.depth_stencil && (flags & D3DCLEAR_STENCIL) && retro_gl_capabilities.stencil_bits)
 	{
-		rgl_glStencilMask(0xff);
-		rgl_glClearStencil((RGLint)stencil);
+		RGL.rgl_glStencilMask(0xff);
+		RGL.rgl_glClearStencil((RGLint)stencil);
 		mask |= RGL_STENCIL_BUFFER_BIT;
 	}
 	if (!mask)
 		return;
-	rgl_glEnable(RGL_SCISSOR_TEST);
+	RGL.rgl_glEnable(RGL_SCISSOR_TEST);
 	if (!count || !rectangles)
 	{
 		/* (the NV2A clips a clear to the viewport: a split screen's window) */
 		screen_rectangle((long)device.viewport.X, (long)device.viewport.Y, (long)device.viewport.Width,
 			(long)device.viewport.Height, scissor);
-		rgl_glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
-		rgl_glClear(mask);
+		RGL.rgl_glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+		RGL.rgl_glClear(mask);
 		return;
 	}
 	for (index = 0; index < count; index++)
@@ -1510,8 +1510,8 @@ void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags,
 		if (left >= right || top >= bottom)
 			continue;
 		screen_rectangle(left, top, right - left, bottom - top, scissor);
-		rgl_glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
-		rgl_glClear(mask);
+		RGL.rgl_glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
+		RGL.rgl_glClear(mask);
 	}
 }
 
@@ -1532,10 +1532,10 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		/* (the window's letterbox bars, black, before the next frame draws
 		inside them) */
 		screen_area_update();
-		rgl_glDisable(RGL_SCISSOR_TEST);
-		rgl_glColorMask(RGL_TRUE, RGL_TRUE, RGL_TRUE, RGL_TRUE);
-		rgl_glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-		rgl_glClear(RGL_COLOR_BUFFER_BIT);
+		RGL.rgl_glDisable(RGL_SCISSOR_TEST);
+		RGL.rgl_glColorMask(RGL_TRUE, RGL_TRUE, RGL_TRUE, RGL_TRUE);
+		RGL.rgl_glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+		RGL.rgl_glClear(RGL_COLOR_BUFFER_BIT);
 		if (device.frame - logged_at >= 600)
 		{
 			platform_log("Direct3D: %lu draws (%lu left out), %lu vertices a frame", statistics.draws / 600,

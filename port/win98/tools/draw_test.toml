@@ -10,7 +10,7 @@ vsync = false
 [debug]
 # every draw of the 600th frame (the main menu's, at about a third of a
 # real machine's speed), in halo.log
-gpu_trace_frame = 600
+gpu_trace_frame = 150
 
 [audio]
 enabled = true

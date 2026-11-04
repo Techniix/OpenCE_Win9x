@@ -248,11 +248,6 @@ typedef void RGLvoid;
 	F(void, glActiveTextureARB, (RGLenum texture)) \
 	F(void, glClientActiveTextureARB, (RGLenum texture))
 
-#define RETRO_GL_DECLARE(type, name, parameters) extern type (RETRO_GL_API *rgl_##name) parameters;
-RETRO_GL_FUNCTIONS(RETRO_GL_DECLARE)
-RETRO_GL_MULTITEXTURE_FUNCTIONS(RETRO_GL_DECLARE)
-#undef RETRO_GL_DECLARE
-
 /* what the card offers (retro_gl_load) */
 struct retro_gl_capabilities
 {
@@ -270,7 +265,29 @@ struct retro_gl_capabilities
 	int depth_bits;
 };
 
-extern struct retro_gl_capabilities retro_gl_capabilities;
+/* the functions and the capabilities, on a page of their own that is made
+read-only once they are found (retro_gl_load): a stray write there (one
+overwrote a function pointer while a level loaded) then stops at the
+writer, which the crash report names, instead of a call going astray */
+struct retro_gl_table
+{
+#define RETRO_GL_MEMBER(type, name, parameters) type (RETRO_GL_API *rgl_##name) parameters;
+	RETRO_GL_FUNCTIONS(RETRO_GL_MEMBER)
+	RETRO_GL_MULTITEXTURE_FUNCTIONS(RETRO_GL_MEMBER)
+#undef RETRO_GL_MEMBER
+	struct retro_gl_capabilities capabilities;
+};
+
+union retro_gl_page
+{
+	struct retro_gl_table table;
+	unsigned char page[4096];
+};
+
+extern union retro_gl_page retro_gl_page;
+
+#define RGL retro_gl_page.table
+#define retro_gl_capabilities retro_gl_page.table.capabilities
 
 /* looks every function up and reads the capabilities, the context being
 current; FALSE if OpenGL 1.1's own functions are missing */

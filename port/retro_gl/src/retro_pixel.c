@@ -420,8 +420,8 @@ static RGLint wrap_mode(DWORD address)
 
 static void unit_select(int unit)
 {
-	if (rgl_glActiveTextureARB)
-		rgl_glActiveTextureARB(RGL_TEXTURE0 + unit);
+	if (RGL.rgl_glActiveTextureARB)
+		RGL.rgl_glActiveTextureARB(RGL_TEXTURE0 + unit);
 }
 
 static void unit_texture(int unit, int stage, const struct retro_texture *texture, int modulate)
@@ -431,16 +431,16 @@ static void unit_texture(int unit, int stage, const struct retro_texture *textur
 	BOOL mip = state[D3DTSS_MIPFILTER] != D3DTEXF_NONE;
 
 	unit_select(unit);
-	rgl_glEnable(RGL_TEXTURE_2D);
-	rgl_glBindTexture(RGL_TEXTURE_2D, texture->name);
-	rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_MAG_FILTER, linear ? RGL_LINEAR : RGL_NEAREST);
-	rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_MIN_FILTER,
+	RGL.rgl_glEnable(RGL_TEXTURE_2D);
+	RGL.rgl_glBindTexture(RGL_TEXTURE_2D, texture->name);
+	RGL.rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_MAG_FILTER, linear ? RGL_LINEAR : RGL_NEAREST);
+	RGL.rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_MIN_FILTER,
 		!mip ? (linear ? RGL_LINEAR : RGL_NEAREST) :
 		state[D3DTSS_MIPFILTER] == D3DTEXF_POINT ? (linear ? RGL_LINEAR_MIPMAP_NEAREST : RGL_NEAREST_MIPMAP_NEAREST) :
 		(linear ? RGL_LINEAR_MIPMAP_LINEAR : RGL_NEAREST_MIPMAP_LINEAR));
-	rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_WRAP_S, wrap_mode(state[D3DTSS_ADDRESSU]));
-	rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_WRAP_T, wrap_mode(state[D3DTSS_ADDRESSV]));
-	rgl_glTexEnvi(RGL_TEXTURE_ENV, RGL_TEXTURE_ENV_MODE, modulate ? RGL_MODULATE : RGL_REPLACE);
+	RGL.rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_WRAP_S, wrap_mode(state[D3DTSS_ADDRESSU]));
+	RGL.rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_WRAP_T, wrap_mode(state[D3DTSS_ADDRESSV]));
+	RGL.rgl_glTexEnvi(RGL_TEXTURE_ENV, RGL_TEXTURE_ENV_MODE, modulate ? RGL_MODULATE : RGL_REPLACE);
 }
 
 int retro_pixel_prepare(struct retro_pixel_setup *setup, const struct retro_vertex *first_vertex)
@@ -476,7 +476,7 @@ int retro_pixel_prepare(struct retro_pixel_setup *setup, const struct retro_vert
 	for (stage = unit; stage < retro_gl_capabilities.texture_units; stage++)
 	{
 		unit_select(stage);
-		rgl_glDisable(RGL_TEXTURE_2D);
+		RGL.rgl_glDisable(RGL_TEXTURE_2D);
 	}
 	unit_select(0);
 	setup->diffuse = TRUE;

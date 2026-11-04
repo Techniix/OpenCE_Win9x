@@ -597,8 +597,8 @@ static void upload_rgba(unsigned char *rgba, unsigned long width, unsigned long 
 	RGLint internal = alpha == 0 ? RGL_RGB5 : alpha == 1 ? RGL_RGB5_A1 : RGL_RGBA4;
 	RGLint level = 0;
 
-	rgl_glPixelStorei(RGL_UNPACK_ALIGNMENT, 1);
-	rgl_glTexImage2D(RGL_TEXTURE_2D, 0, internal, (RGLsizei)width, (RGLsizei)height, 0, RGL_RGBA,
+	RGL.rgl_glPixelStorei(RGL_UNPACK_ALIGNMENT, 1);
+	RGL.rgl_glTexImage2D(RGL_TEXTURE_2D, 0, internal, (RGLsizei)width, (RGLsizei)height, 0, RGL_RGBA,
 		RGL_UNSIGNED_BYTE, rgba);
 	while (mipmaps && (width > 1 || height > 1))
 	{
@@ -622,7 +622,7 @@ static void upload_rgba(unsigned char *rgba, unsigned long width, unsigned long 
 		}
 		width = next_width;
 		height = next_height;
-		rgl_glTexImage2D(RGL_TEXTURE_2D, ++level, internal, (RGLsizei)width, (RGLsizei)height, 0, RGL_RGBA,
+		RGL.rgl_glTexImage2D(RGL_TEXTURE_2D, ++level, internal, (RGLsizei)width, (RGLsizei)height, 0, RGL_RGBA,
 			RGL_UNSIGNED_BYTE, rgba);
 	}
 }
@@ -704,8 +704,8 @@ static void entry_upload(struct texture_entry *entry, const struct xgpu_texture_
 	alpha = alpha_kind(rgba, fit_width * fit_height);
 	entry->texture.has_alpha = alpha != 0;
 	if (!entry->texture.name)
-		rgl_glGenTextures(1, &entry->texture.name);
-	rgl_glBindTexture(RGL_TEXTURE_2D, entry->texture.name);
+		RGL.rgl_glGenTextures(1, &entry->texture.name);
+	RGL.rgl_glBindTexture(RGL_TEXTURE_2D, entry->texture.name);
 	upload_rgba(rgba, fit_width, fit_height, description->levels > 1, alpha);
 	free(rgba);
 	statistics.uploads++;
@@ -947,8 +947,8 @@ unsigned int hud_hires_png_texture(const void *png, unsigned long size, unsigned
 	free(argb_texels);
 	if (!rgba)
 		return 0;
-	rgl_glGenTextures(1, &name);
-	rgl_glBindTexture(RGL_TEXTURE_2D, name);
+	RGL.rgl_glGenTextures(1, &name);
+	RGL.rgl_glBindTexture(RGL_TEXTURE_2D, name);
 	upload_rgba(rgba, fit_width, fit_height, TRUE, alpha_kind(rgba, fit_width * fit_height));
 	free(rgba);
 	*levels = 1;
