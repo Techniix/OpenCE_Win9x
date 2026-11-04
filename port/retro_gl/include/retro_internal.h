@@ -145,7 +145,12 @@ struct retro_pixel_setup
 	int passes;
 };
 
-int retro_pixel_prepare(struct retro_pixel_setup *setup);
+/* the shader's combiners, as a number (each logged once by it) */
+unsigned long retro_pixel_hash(void);
+int retro_pixel_prepare(struct retro_pixel_setup *setup, const struct retro_vertex *first_vertex);
+/* each vertex's color as the pixel shader makes it with its textures white
+(retro_pixel.c): what the texture units then multiply the textures into */
+void retro_pixel_vertex_colors(struct retro_vertex *vertices, unsigned long count);
 
 float retro_dword_to_float(DWORD value);
 void retro_color_to_floats(D3DCOLOR color, float *rgba);

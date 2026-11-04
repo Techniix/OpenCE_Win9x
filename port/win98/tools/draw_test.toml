@@ -7,6 +7,11 @@ mode = "windowed"
 window_size = "640x480"
 vsync = false
 
+[debug]
+# every draw of the 600th frame (the main menu's, at about a third of a
+# real machine's speed), in halo.log
+gpu_trace_frame = 600
+
 [audio]
 enabled = true
 reverb = false

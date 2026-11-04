@@ -26,6 +26,7 @@ cannot do is done on the processor or left out:
 #include <SDL3/SDL.h>
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -101,7 +102,7 @@ static struct
 
 	/* where the 640x480 screen is in the window (letterboxed), in pixels
 	from the window's bottom left, as of the frame's start */
-	int area[4];
+	int area[6];
 
 	unsigned long frame;
 	unsigned long next_vertex_shader_id;
@@ -276,6 +277,12 @@ static void screen_area_update(void)
 	{
 		fit_height = height;
 		fit_width = height * SCREEN_WIDTH / SCREEN_HEIGHT;
+	}
+	if (width != device.area[4] || height != device.area[5])
+	{
+		platform_log("Direct3D: the window is %dx%d, the screen drawn at %dx%d in it", width, height, fit_width, fit_height);
+		device.area[4] = width;
+		device.area[5] = height;
 	}
 	device.area[0] = (width - fit_width) / 2;
 	device.area[1] = (height - fit_height) / 2;
@@ -1052,6 +1059,49 @@ static void raster_state_apply(void)
 	}
 }
 
+/* ---------- tracing (debug.gpu_trace_frame: every draw of that frame) */
+
+static BOOL trace_frame(void)
+{
+	static long frame = -2;
+
+	if (frame == -2)
+		frame = config_integer("debug.gpu_trace_frame");
+	return frame >= 0 && (unsigned long)frame == device.frame;
+}
+
+static void trace_draw(const char *kind, D3DPRIMITIVETYPE type, unsigned long count,
+	const struct retro_pixel_setup *setup, const struct retro_vertex *vertex)
+{
+	DWORD *rs = D3D__RenderState;
+	char textures[160];
+	int unit;
+
+	textures[0] = '\0';
+	for (unit = 0; unit < setup->units; unit++)
+	{
+		const D3DBaseTexture *texture = retro_device_texture(setup->unit_stage[unit]);
+		char one[48];
+
+		snprintf(one, sizeof(one), " t%d=%08lx/%08lx/%08lx", setup->unit_stage[unit],
+			texture ? (unsigned long)texture->Data : 0, texture ? (unsigned long)texture->Format : 0,
+			texture ? (unsigned long)texture->Size : 0);
+		strcat(textures, one);
+	}
+	platform_log("trace %s: program %lu, shader %08lx, %s %lu,%s; blend %lu %lx %lx, alpha test %lu %lx %lu, z %lu %lu, "
+		"cull %lx, view %lu %lu %lu %lu; first at %.2f %.2f %.2f %.2f color %02x%02x%02x%02x uv %.3f %.3f",
+		kind, device.fixed_function ? 0 : current_program()->id, retro_pixel_hash(),
+		type == D3DPT_QUADLIST ? "quads" : type == D3DPT_TRIANGLESTRIP ? "strip" : type == D3DPT_TRIANGLEFAN ? "fan" :
+		type == D3DPT_TRIANGLELIST ? "triangles" : "other", count, textures,
+		(unsigned long)rs[D3DRS_ALPHABLENDENABLE], (unsigned long)rs[D3DRS_SRCBLEND], (unsigned long)rs[D3DRS_DESTBLEND],
+		(unsigned long)rs[D3DRS_ALPHATESTENABLE], (unsigned long)rs[D3DRS_ALPHAFUNC], (unsigned long)rs[D3DRS_ALPHAREF],
+		(unsigned long)rs[D3DRS_ZENABLE], (unsigned long)rs[D3DRS_ZWRITEENABLE], (unsigned long)rs[D3DRS_CULLMODE],
+		(unsigned long)device.viewport.X, (unsigned long)device.viewport.Y, (unsigned long)device.viewport.Width,
+		(unsigned long)device.viewport.Height, vertex->position[0], vertex->position[1], vertex->position[2],
+		vertex->position[3], vertex->diffuse[0], vertex->diffuse[1], vertex->diffuse[2], vertex->diffuse[3],
+		vertex->texture[0][0], vertex->texture[0][1]);
+}
+
 /* ---------- drawing */
 
 static RGLenum primitive_mode(D3DPRIMITIVETYPE type)
@@ -1108,6 +1158,8 @@ static struct retro_vertex_program *draw_begin(BOOL immediate)
 
 	if (!drawing_to_screen() || (device.fixed_function ? !immediate : !program || !program->instruction_count))
 	{
+		if (trace_frame())
+			platform_log("trace: left out (%s)", !drawing_to_screen() ? "another target" : "no program");
 		statistics.skipped++;
 		return NULL;
 	}
@@ -1170,7 +1222,10 @@ static void vertices_draw(D3DPRIMITIVETYPE type, unsigned long vertex_count, con
 	int unit;
 
 	raster_state_apply();
-	retro_pixel_prepare(&setup);
+	retro_pixel_prepare(&setup, vertex_count ? &vertices[0] : NULL);
+	retro_pixel_vertex_colors(vertices, vertex_count);
+	if (trace_frame())
+		trace_draw(indices ? "indexed" : "draw", type, indices ? index_count : vertex_count, &setup, vertices);
 	rgl_glVertexPointer(4, RGL_FLOAT, sizeof(*vertices), vertices->position);
 	if (setup.diffuse)
 	{
@@ -1406,6 +1461,9 @@ void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags,
 	RGLint scissor[4];
 	DWORD index;
 
+	if (trace_frame())
+		platform_log("trace clear: flags %lx color %08lx, %lu rectangles, target %08lx", (unsigned long)flags,
+			(unsigned long)color, (unsigned long)count, device.render_target ? (unsigned long)device.render_target->Data : 0);
 	if (!drawing_to_screen())
 		return;
 	retro_color_to_floats(color, rgba);
