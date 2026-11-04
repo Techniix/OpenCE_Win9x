@@ -177,6 +177,12 @@ def game_units(system):
     return units
 
 
+# the OpenGL 4.5 renderer's files, which port/retro_gl (OpenGL 1.1, the
+# cards of the time) takes the place of
+RETRO_GL_REPLACED = {"d3d8_gl.c", "xbox_textures.c", "nv2a_vsh.c", "nv2a_psh.c", "gl_functions.c", "xgpu_post.c",
+                     "xgpu_text.c", "hud_hires.c", "text_hires.c"}
+
+
 def platform_units(system, sdl: Path):
     windows = ROOT / "port" / "windows"
     abi = TARGET + ["-g0", f"-DHALO_PORT_WINDOW_BASE=0x{WINDOW_BASE:08X}UL"] + [
@@ -201,7 +207,7 @@ def platform_units(system, sdl: Path):
     replaced.discard("msvc_wide.c")
     units = []
     for source in sorted((ROOT / "port" / "linux" / "src").glob("*.c")):
-        if source.name in replaced:
+        if source.name in replaced or source.name in RETRO_GL_REPLACED:
             continue
         flags = win32 if source.name == "posix_dtls.c" else platform
         if source.name == "msvc_wide.c":
@@ -221,6 +227,10 @@ def platform_units(system, sdl: Path):
     units.append(("port/win98/src/win9x_linux_crt.c", win32, False))
     units.append(("port/win98/src/win9x_crt.c", win32, False))
     units.append(("port/win98/src/win9x_net.c", win32, False))
+    # Direct3D 8 on OpenGL 1.1 (port/retro_gl), compiled as the platform
+    # layer's files it replaces are
+    for source in sorted((ROOT / "port" / "retro_gl" / "src").glob("*.c")):
+        units.append((str(source.relative_to(ROOT)), platform + ["-Iport/retro_gl/include"], False))
     # SDL 3's functions the platform layer calls (port/retro_sdl)
     retro_sdl = abi + ["-std=gnu11", "-D_WIN32_WINNT=0x0410", "-include", "port/win98/include/win9x_compat.h",
                        f"-I{sdl}", "-Iport/retro_sdl/include", "-Wall", "-Wno-unused-function"] + system["all"]

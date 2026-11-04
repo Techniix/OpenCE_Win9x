@@ -10,6 +10,13 @@ and DOS to come), and what it gives them.
 
 #include <SDL3/SDL.h>
 
+/* ---------- hints of retro_sdl's own (SDL_SetHint) */
+
+/* the depth and stencil bits an OpenGL window has at least, whatever
+SDL_GL_SetAttribute asked */
+#define RETRO_SDL_HINT_GL_MINIMUM_DEPTH "RETRO_SDL_GL_MINIMUM_DEPTH"
+#define RETRO_SDL_HINT_GL_MINIMUM_STENCIL "RETRO_SDL_GL_MINIMUM_STENCIL"
+
 /* ---------- a backend's */
 
 /* each name in a folder (not "." or ".."), passed to add; false if the

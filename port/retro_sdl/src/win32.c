@@ -1295,6 +1295,18 @@ SDL_GLContext SDL_GL_CreateContext(SDL_Window *window)
 	format.cAlphaBits = (BYTE)gl_attributes.alpha;
 	format.cDepthBits = (BYTE)gl_attributes.depth;
 	format.cStencilBits = (BYTE)gl_attributes.stencil;
+	/* (the program's least: port/retro_gl draws straight into the window,
+	which needs the depth and stencil buffers that the OpenGL 4.5
+	renderer, which draws into its own, does not ask for) */
+	{
+		const char *depth = retro_sdl_hint(RETRO_SDL_HINT_GL_MINIMUM_DEPTH);
+		const char *stencil = retro_sdl_hint(RETRO_SDL_HINT_GL_MINIMUM_STENCIL);
+
+		if (depth && atoi(depth) > format.cDepthBits)
+			format.cDepthBits = (BYTE)atoi(depth);
+		if (stencil && atoi(stencil) > format.cStencilBits)
+			format.cStencilBits = (BYTE)atoi(stencil);
+	}
 	format.iLayerType = PFD_MAIN_PLANE;
 	index = ChoosePixelFormat(window->dc, &format);
 	if (!index || !SetPixelFormat(window->dc, index, &format))

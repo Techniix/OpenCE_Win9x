@@ -1,0 +1,22 @@
+# The Windows 9x build drawing through port/retro_gl (OpenGL 1.1), in a
+# 640x480 window, with sound (the lighter mix). Copy it beside halo.exe as
+# config.toml (attrib -r config.toml if from a CD). Close the window to quit.
+
+[display]
+mode = "windowed"
+window_size = "640x480"
+vsync = false
+
+[audio]
+enabled = true
+reverb = false
+resampler = "linear"
+
+[update]
+auto = false
+
+[crash_reports]
+upload = "no"
+
+[discord]
+application_id = ""

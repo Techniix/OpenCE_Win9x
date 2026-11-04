@@ -15,7 +15,7 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
 | Compiling and linking (`build.py`, `include/`, `src/`, `runtime/`) | All 900 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers, and link into build/win98/halo.exe: the game through hybrid precision, the Windows build's platform layer, the third-party libraries, and what Windows 9x lacks (below). Runs on Windows 98 SE (86Box: VIA Cyrix III, 128 MB) without drawing: loads ui.map and the main menu, plays its music to no device, and quits on time (first runs, below). |
 | SDL 3 | `port/retro_sdl`: the SDL 3 functions the platform layer calls, on Win32 (Windows 95 and later). Its time, threads, files and events run; its window, OpenGL and sound not yet. |
-| Fixed-function OpenGL 1.1 renderer | Not started. |
+| OpenGL 1.1 renderer | `port/retro_gl`: Direct3D 8 on OpenGL 1.1 in place of the OpenGL 4.5 renderer (its README). First version, not yet run: the vertex programs on the processor, textures fitted to the card, the pixel shaders approximate. |
 
 ## Maths: hybrid precision
 
@@ -177,6 +177,9 @@ first_boot.toml to config.toml and clear its read-only attribute
    window, its keyboard and mouse, fullscreen, OpenGL and a tone, through
    the same SDL layer as the game; retro_sdl_test.log beside it has what it
    found, the OpenGL driver's version and extensions among it.
+5. With draw_test.toml as config.toml, halo.exe draws (port/retro_gl) in a
+   640x480 window, with sound; halo.log lists the OpenGL driver and each
+   pixel shader the game uses.
 4. With sound_test.toml as config.toml, halo.exe plays the main menu's
    music, still without drawing (heard on 86Box, with stutters at a third
    of the machine's speed; the mixer's reverb and sinc resampling off there
