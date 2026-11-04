@@ -240,12 +240,17 @@ def platform_units(system, sdl: Path):
                        f"-I{sdl}", "-Iport/retro_sdl/include", "-Wall", "-Wno-unused-function"] + system["all"]
     for name in ("common.c", "win32.c"):
         units.append((f"port/retro_sdl/src/{name}", retro_sdl, False))
-    # the assets the Linux build embeds (tools/embed_assets.py, tools/server_ui_embed.py)
-    generated = ["build/linux/generated/hud_hires_assets.c", "build/linux/generated/server_ui_assets.c",
-                 "build/linux/platform_msvc_semantics.h"]
+    # the assets the Linux build embeds, but for the high-res HUD, titles, button
+    # icons, fonts and SMAA, which port/retro_gl does not draw (its hud_hires_*
+    # and text_hires_* are stubs, retro_shim.c): the menus, the pointer and the
+    # icon alone (tools/embed_assets.py --menus-only), 12.5 MB of the program
+    generated = ["build/linux/generated/server_ui_assets.c", "build/linux/platform_msvc_semantics.h"]
     subprocess.run(["ninja", "-C", str(ROOT), *generated], check=True, capture_output=True)
-    for source in generated[:2]:
-        units.append((source, platform, False))
+    assets = BUILD / "generated" / "retro_assets.c"
+    assets.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([sys.executable, str(ROOT / "tools" / "embed_assets.py"), str(assets), "--menus-only"], check=True)
+    units.append((str(assets), platform, False))
+    units.append((generated[0], platform, False))
     return units
 
 
