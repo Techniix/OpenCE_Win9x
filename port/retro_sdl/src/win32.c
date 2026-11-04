@@ -1519,7 +1519,10 @@ void SDL_ShowOpenFileDialog(SDL_DialogFileCallback callback, void *userdata, SDL
 
 enum
 {
-	AUDIO_BUFFER_COUNT = 4,
+	/* (six of 1024 frames: some 140 ms at 44.1 kHz in all, refilled a
+	twenty-third of a second at a time, room for a machine of the time
+	busy with the game; four ran dry under 86Box at a third of the speed) */
+	AUDIO_BUFFER_COUNT = 6,
 	AUDIO_BUFFER_FRAMES = 1024,
 	AUDIO_MAXIMUM_CHANNELS = 8
 };
@@ -1710,7 +1713,8 @@ static unsigned __stdcall audio_thread(void *argument)
 
 	if (retro_sdl_thread_started)
 		retro_sdl_thread_started();
-	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+	/* (above the game's threads: the mix is short, and late is a gap) */
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 	while (!stream->stopping)
 	{
 		for (index = 0; index < AUDIO_BUFFER_COUNT; index++)

@@ -8,6 +8,11 @@ exit_after = 60.0
 
 [audio]
 enabled = true
+# what the game's mixer costs the processor: the Xbox's reverb, and
+# resampling each sound with a band-limited (sinc) filter; true and "sinc"
+# sound as the Xbox did, false and "linear" leave a slow machine more time
+reverb = false
+resampler = "linear"
 
 [update]
 auto = false

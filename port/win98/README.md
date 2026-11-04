@@ -178,4 +178,7 @@ first_boot.toml to config.toml and clear its read-only attribute
    the same SDL layer as the game; retro_sdl_test.log beside it has what it
    found, the OpenGL driver's version and extensions among it.
 4. With sound_test.toml as config.toml, halo.exe plays the main menu's
-   music, still without drawing.
+   music, still without drawing (heard on 86Box, with stutters at a third
+   of the machine's speed; the mixer's reverb and sinc resampling off there
+   leave it more time). Windows 9x's sound drivers take one program at a
+   time: another playing leaves the game silent, as halo.log says.
