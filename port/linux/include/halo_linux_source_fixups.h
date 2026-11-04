@@ -106,6 +106,10 @@ void halo_screen_anti_alias(short x0, short y0, short x1, short y1);
 /* display.hdr's tone mapping of a window's 3D view, before its
 anti-aliasing (source/render/render.c) */
 void halo_screen_tone_map(short x0, short y0, short x1, short y1);
+/* marks where a pass of a window's frame begins in the GPU trace
+(debug.gpu_trace_frame, Scroll Lock): source/render/render.c render_window. It
+draws nothing and changes no game state; tools/gpu_trace_census.py reads it */
+void halo_render_pass(const char *name);
 /* network.client_timeout_seconds, in milliseconds (port/linux/src/port_config.c) */
 unsigned long network_client_timeout_milliseconds(void);
 /* a dedicated server (halo --server: port/linux/src/server_mode.c,

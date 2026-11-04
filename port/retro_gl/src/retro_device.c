@@ -1092,6 +1092,12 @@ static BOOL trace_frame(void)
 	return (frame >= 0 && (unsigned long)frame == device.frame) || device.frame == trace_requested;
 }
 
+void halo_render_pass(const char *name)
+{
+	if (trace_frame())
+		platform_log("trace pass: %s", name);
+}
+
 static void trace_key_check(void)
 {
 #ifdef _WIN32

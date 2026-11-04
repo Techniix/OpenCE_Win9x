@@ -490,6 +490,9 @@ static void library_probe(void)
 	static const char *const winmm[] = { "joyGetPosEx", "timeBeginPeriod", "waveOutOpen", 0 };
 	static const char *const d3d8[] = { "Direct3DCreate8", 0 };
 	static const char *const d3d9[] = { "Direct3DCreate9", 0 };
+	/* Direct3D 7 is reached through DirectDraw 7 (IDirectDraw7::QueryInterface), so
+	DirectDrawCreateEx is its entry; d3dim700.dll is its device */
+	static const char *const ddraw[] = { "DirectDrawCreate", "DirectDrawCreateEx", 0 };
 	static const char *const msvcrt[] = { "_beginthreadex", "_ftol", "_vsnprintf", "_aligned_malloc",
 		"_snwprintf", "strtok_s", 0 };
 	static const char *const none[] = { 0 };
@@ -505,6 +508,9 @@ static void library_probe(void)
 	function_probe("winmm.dll", winmm);
 	function_probe("d3d8.dll", d3d8);
 	function_probe("d3d9.dll", d3d9);
+	function_probe("ddraw.dll", ddraw);
+	function_probe("d3dim700.dll", none);
+	function_probe("d3dim.dll", none);
 	function_probe("msvcrt.dll", msvcrt);
 	function_probe("unicows.dll", none);
 	function_probe("winhttp.dll", none);

@@ -7184,6 +7184,13 @@ void WINAPI D3DDevice_Clear(DWORD count, CONST D3DRECT *rectangles, DWORD flags,
 
 /* ---------- the anti-aliasing passes */
 
+/* the GPU trace's pass marks are kept by the OpenGL 1.1 renderer only
+(port/retro_gl/src/retro_device.c) */
+void halo_render_pass(const char *name)
+{
+	(void)name;
+}
+
 /* display.anti_aliasing's pass over a window's 3D view, before the HUD and
 menus are drawn over it (source/render/render.c); the window's bounds in the
 game's units of the screen */
