@@ -467,7 +467,8 @@ static real object_get_level_of_detail_pixels(
 
 	object_get_bounding_sphere(object_index, &center, &radius);
 
-	return render_frustum_sphere_diameter_in_pixels(&render.frustum, &center, radius);
+	/* port: render.lod_scale (render_policy.c) */
+	return render_frustum_sphere_diameter_in_pixels(&render.frustum, &center, radius) * halo_render_lod_scale();
 }
 
 static void render_object_list(

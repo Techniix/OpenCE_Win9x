@@ -306,6 +306,24 @@ struct rendered_cluster *rendered_cluster_get(
 	return &render.rendered_clusters[rendered_cluster_index];
 }
 
+/* port: one layer of decals over the clusters in view; render.skip_passes can leave it out */
+static void render_decal_layer(
+	short layer)
+{
+	short rendered_cluster_index;
+
+	rasterizer_decals_begin(layer);
+	for (rendered_cluster_index = 0;
+		rendered_cluster_index < render.rendered_cluster_count;
+		rendered_cluster_index++)
+	{
+		rasterizer_decals_draw(rendered_cluster_get(rendered_cluster_index)->cluster_index);
+	}
+	rasterizer_decals_end();
+
+	return;
+}
+
 static void render_window(
 	short local_player_index,
 	const struct render_camera *camera,
@@ -351,67 +369,50 @@ static void render_window(
 		structure_render_lightmaps();
 		rasterizer_lens_flares_submit_occlusion_tests();
 		halo_render_pass("object_shadows");
-		render_object_shadows();
+		if (halo_render_pass_enabled("object_shadows"))
+			render_object_shadows();
 		halo_render_pass("lights_diffuse");
 		lights_render_diffuse();
 
 		halo_render_pass("decals_light");
-		rasterizer_decals_begin(_decal_layer_light);
-		for (rendered_cluster_index = 0;
-			rendered_cluster_index < render.rendered_cluster_count;
-			rendered_cluster_index++)
-		{
-			rasterizer_decals_draw(rendered_cluster_get(rendered_cluster_index)->cluster_index);
-		}
-		rasterizer_decals_end();
+		if (halo_render_pass_enabled("decals_light"))
+			render_decal_layer(_decal_layer_light);
 
 		halo_render_pass("decals_alpha_tested");
-		rasterizer_decals_begin(_decal_layer_alpha_tested);
-		for (rendered_cluster_index = 0;
-			rendered_cluster_index < render.rendered_cluster_count;
-			rendered_cluster_index++)
-		{
-			rasterizer_decals_draw(rendered_cluster_get(rendered_cluster_index)->cluster_index);
-		}
-		rasterizer_decals_end();
+		if (halo_render_pass_enabled("decals_alpha_tested"))
+			render_decal_layer(_decal_layer_alpha_tested);
 
 		halo_render_pass("bsp_diffuse_texture");
 		structure_render_diffuse_texture();
 
 		halo_render_pass("decals_primary");
-		rasterizer_decals_begin(_decal_layer_primary);
-		for (rendered_cluster_index = 0;
-			rendered_cluster_index < render.rendered_cluster_count;
-			rendered_cluster_index++)
-		{
-			rasterizer_decals_draw(rendered_cluster_get(rendered_cluster_index)->cluster_index);
-		}
-		rasterizer_decals_end();
+		if (halo_render_pass_enabled("decals_primary"))
+			render_decal_layer(_decal_layer_primary);
 
 		halo_render_pass("decals_secondary");
-		rasterizer_decals_begin(_decal_layer_secondary);
-		for (rendered_cluster_index = 0;
-			rendered_cluster_index < render.rendered_cluster_count;
-			rendered_cluster_index++)
-		{
-			rasterizer_decals_draw(rendered_cluster_get(rendered_cluster_index)->cluster_index);
-		}
-		rasterizer_decals_end();
+		if (halo_render_pass_enabled("decals_secondary"))
+			render_decal_layer(_decal_layer_secondary);
 
 		halo_render_pass("lights_specular");
-		lights_render_specular();
+		if (halo_render_pass_enabled("lights_specular"))
+			lights_render_specular();
 		halo_render_pass("bsp_specular_lightmaps");
-		structure_render_specular_lightmaps();
+		if (halo_render_pass_enabled("bsp_specular_lightmaps"))
+			structure_render_specular_lightmaps();
 		halo_render_pass("bsp_reflection_masks");
-		structure_render_reflection_lightmap_masks();
+		if (halo_render_pass_enabled("bsp_reflection_masks"))
+			structure_render_reflection_lightmap_masks();
 		halo_render_pass("bsp_reflection_mirrors");
-		structure_render_reflection_mirrors();
+		if (halo_render_pass_enabled("bsp_reflection_mirrors"))
+			structure_render_reflection_mirrors();
 		halo_render_pass("bsp_reflections");
-		structure_render_reflections();
+		if (halo_render_pass_enabled("bsp_reflections"))
+			structure_render_reflections();
 		halo_render_pass("bsp_transparent_geometry");
 		structure_render_transparent_geometry();
 		halo_render_pass("bsp_fog");
-		structure_render_fog();
+		if (halo_render_pass_enabled("bsp_fog"))
+			structure_render_fog();
 		halo_render_pass("post_rasterize_objects");
 		game_engine_post_rasterize_objects();
 		halo_render_pass("weather_particles");
@@ -426,22 +427,18 @@ static void render_window(
 		rasterizer_transparent_geometry_draw(TRUE);
 
 		halo_render_pass("decals_water");
-		rasterizer_decals_begin(_decal_layer_water);
-		for (rendered_cluster_index = 0;
-			rendered_cluster_index < render.rendered_cluster_count;
-			rendered_cluster_index++)
-		{
-			rasterizer_decals_draw(rendered_cluster_get(rendered_cluster_index)->cluster_index);
-		}
-		rasterizer_decals_end();
+		if (halo_render_pass_enabled("decals_water"))
+			render_decal_layer(_decal_layer_water);
 
 		halo_render_pass("detail_objects");
-		structure_render_detail_objects();
+		if (halo_render_pass_enabled("detail_objects"))
+			structure_render_detail_objects();
 		halo_render_pass("transparent_geometry_last");
 		rasterizer_transparent_geometry_draw(FALSE);
 		rasterizer_transparent_geometry_stop();
 		halo_render_pass("fog_screen");
-		structure_render_fog_screen();
+		if (halo_render_pass_enabled("fog_screen"))
+			structure_render_fog_screen();
 		halo_render_pass("lens_flares");
 		rasterizer_lens_flares_draw();
 		/* port: the 3D view tone mapped (display.hdr) and antialiased

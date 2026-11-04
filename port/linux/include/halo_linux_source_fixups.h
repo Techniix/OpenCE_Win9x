@@ -110,6 +110,10 @@ void halo_screen_tone_map(short x0, short y0, short x1, short y1);
 (debug.gpu_trace_frame, Scroll Lock): source/render/render.c render_window. It
 draws nothing and changes no game state; tools/gpu_trace_census.py reads it */
 void halo_render_pass(const char *name);
+/* render.skip_passes: whether a pass of render_window is drawn (port/linux/game/render_policy.c),
+and render.lod_scale, the factor of an object's size for its level of detail */
+unsigned char halo_render_pass_enabled(const char *name);
+float halo_render_lod_scale(void);
 /* network.client_timeout_seconds, in milliseconds (port/linux/src/port_config.c) */
 unsigned long network_client_timeout_milliseconds(void);
 /* a dedicated server (halo --server: port/linux/src/server_mode.c,
