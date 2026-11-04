@@ -16,6 +16,11 @@ and DOS to come), and what it gives them.
 SDL_GL_SetAttribute asked */
 #define RETRO_SDL_HINT_GL_MINIMUM_DEPTH "RETRO_SDL_GL_MINIMUM_DEPTH"
 #define RETRO_SDL_HINT_GL_MINIMUM_STENCIL "RETRO_SDL_GL_MINIMUM_STENCIL"
+/* "640x480": the window's OpenGL drawable that size and no other, read when
+the context is made: no resizing or maximizing, and fullscreen the display
+changed to that mode (the Voodoo3's ICD loses its context's extensions when
+the window grows) */
+#define RETRO_SDL_HINT_GL_FIXED_SIZE "RETRO_SDL_GL_FIXED_SIZE"
 
 /* ---------- a backend's */
 

@@ -113,6 +113,11 @@ static struct
 static struct
 {
 	unsigned long draws, skipped, vertices;
+	/* (where the time goes, in nanoseconds since the last log: the vertex
+	programs, the pixel shaders and textures, the OpenGL calls, the swap,
+	whole frames; the slowest frame, for the stutter) */
+	Uint64 vertex_time, pixel_time, submit_time, swap_time, frames_time, slowest, logged, frame_start;
+	unsigned long frames;
 } statistics;
 
 float retro_dword_to_float(DWORD value)
@@ -542,6 +547,7 @@ HRESULT WINAPI Direct3D_CreateDevice(UINT adapter, D3DDEVTYPE device_type, void 
 		draws with: port/retro_sdl) */
 		SDL_SetHint("RETRO_SDL_GL_MINIMUM_DEPTH", "16");
 		SDL_SetHint("RETRO_SDL_GL_MINIMUM_STENCIL", "8");
+		SDL_SetHint("RETRO_SDL_GL_FIXED_SIZE", "640x480");
 		if (!config_boolean("debug.null_renderer") && platform_video_initialize(SCREEN_WIDTH, SCREEN_HEIGHT))
 			gl_initialize();
 		else
@@ -1182,6 +1188,7 @@ static void vertex_state(struct retro_vertex_state *state)
 into device.vertices */
 static BOOL vertices_from_streams(const struct retro_vertex_program *program, unsigned long first, unsigned long count)
 {
+	Uint64 started = SDL_GetTicksNS();
 	struct retro_vertex_state state;
 	float inputs[RETRO_ATTRIBUTE_COUNT][4];
 	const unsigned char *bases[RETRO_ATTRIBUTE_COUNT];
@@ -1213,6 +1220,7 @@ static BOOL vertices_from_streams(const struct retro_vertex_program *program, un
 		retro_vertex_run(program, &state, (const float (*)[4])inputs, &device.vertices[vertex]);
 	}
 	statistics.vertices += count;
+	statistics.vertex_time += SDL_GetTicksNS() - started;
 	return TRUE;
 }
 
@@ -1223,10 +1231,13 @@ static void vertices_draw(D3DPRIMITIVETYPE type, unsigned long vertex_count, con
 	struct retro_pixel_setup setup;
 	struct retro_vertex *vertices = device.vertices;
 	int unit;
+	Uint64 started = SDL_GetTicksNS(), prepared;
 
 	raster_state_apply();
 	retro_pixel_prepare(&setup, vertex_count ? &vertices[0] : NULL);
 	retro_pixel_vertex_colors(vertices, vertex_count);
+	prepared = SDL_GetTicksNS();
+	statistics.pixel_time += prepared - started;
 	if (trace_frame())
 		trace_draw(indices ? "indexed" : "draw", type, indices ? index_count : vertex_count, &setup, vertices);
 	RGL.rgl_glVertexPointer(4, RGL_FLOAT, sizeof(*vertices), vertices->position);
@@ -1272,6 +1283,7 @@ static void vertices_draw(D3DPRIMITIVETYPE type, unsigned long vertex_count, con
 		RGL.rgl_glDrawElements(primitive_mode(type), (RGLsizei)index_count, RGL_UNSIGNED_SHORT, indices);
 	else
 		RGL.rgl_glDrawArrays(primitive_mode(type), 0, (RGLsizei)vertex_count);
+	statistics.submit_time += SDL_GetTicksNS() - prepared;
 }
 
 void WINAPI D3DDevice_SetStreamSource(UINT stream_number, D3DVertexBuffer *stream_data, UINT stride)
@@ -1529,9 +1541,23 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 	(void)unused2;
 	if (device.gl_ready)
 	{
-		static unsigned long logged_at;
+		Uint64 swap_started = SDL_GetTicksNS(), now;
 
 		platform_video_swap();
+		now = SDL_GetTicksNS();
+		statistics.swap_time += now - swap_started;
+		if (statistics.frame_start)
+		{
+			Uint64 frame = now - statistics.frame_start;
+
+			statistics.frames_time += frame;
+			if (frame > statistics.slowest)
+				statistics.slowest = frame;
+			statistics.frames++;
+		}
+		statistics.frame_start = now;
+		if (!statistics.logged)
+			statistics.logged = now;
 		/* (the window's letterbox bars, black, before the next frame draws
 		inside them) */
 		screen_area_update();
@@ -1539,12 +1565,27 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		RGL.rgl_glColorMask(RGL_TRUE, RGL_TRUE, RGL_TRUE, RGL_TRUE);
 		RGL.rgl_glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		RGL.rgl_glClear(RGL_COLOR_BUFFER_BIT);
-		if (device.frame - logged_at >= 600)
+		/* (every 10 seconds) */
+		if (statistics.frames && now - statistics.logged >= 10000000000ULL)
 		{
-			platform_log("Direct3D: %lu draws (%lu left out), %lu vertices a frame", statistics.draws / 600,
-				statistics.skipped / 600, statistics.vertices / 600);
-			statistics.draws = statistics.skipped = statistics.vertices = 0;
-			logged_at = device.frame;
+			unsigned long frames = statistics.frames;
+			unsigned long frame_ms = (unsigned long)(statistics.frames_time / frames / 1000000);
+
+			platform_log("Direct3D: %lu draws (%lu left out), %lu vertices a frame", statistics.draws / frames,
+				statistics.skipped / frames, statistics.vertices / frames);
+			platform_log("Direct3D: %lu.%lu frames a second; a frame %lu ms (the slowest %lu): vertex programs %lu, "
+				"pixel shaders and textures %lu, OpenGL %lu, swap %lu, the game the rest",
+				(unsigned long)(frames * 10000000000ULL / statistics.frames_time) / 10,
+				(unsigned long)(frames * 10000000000ULL / statistics.frames_time) % 10, frame_ms,
+				(unsigned long)(statistics.slowest / 1000000),
+				(unsigned long)(statistics.vertex_time / frames / 1000000),
+				(unsigned long)(statistics.pixel_time / frames / 1000000),
+				(unsigned long)(statistics.submit_time / frames / 1000000),
+				(unsigned long)(statistics.swap_time / frames / 1000000));
+			statistics.draws = statistics.skipped = statistics.vertices = statistics.frames = 0;
+			statistics.vertex_time = statistics.pixel_time = statistics.submit_time = statistics.swap_time = 0;
+			statistics.frames_time = statistics.slowest = 0;
+			statistics.logged = now;
 		}
 	}
 	device.frame++;

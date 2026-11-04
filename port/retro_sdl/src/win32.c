@@ -568,6 +568,9 @@ struct SDL_Window
 
 static SDL_Window *the_window;
 
+/* the drawable's one size (RETRO_SDL_HINT_GL_FIXED_SIZE), 0 for any */
+static int fixed_width, fixed_height;
+
 /* ---------- events: a queue */
 
 enum
@@ -866,8 +869,17 @@ static bool fullscreen_apply(SDL_Window *window, bool fullscreen)
 	if (fullscreen)
 	{
 		const SDL_DisplayMode *mode = window->fullscreen_mode_set ? &window->fullscreen_mode : &desktop_mode;
+		SDL_DisplayMode fixed_mode;
 
 		desktop_mode_read();
+		if (fixed_width > 0 && !window->fullscreen_mode_set)
+		{
+			fixed_mode = desktop_mode;
+			fixed_mode.w = fixed_width;
+			fixed_mode.h = fixed_height;
+			fixed_mode.refresh_rate = 0.0f;
+			mode = &fixed_mode;
+		}
 		if (!(window->flags & SDL_WINDOW_FULLSCREEN))
 			GetWindowRect(window->handle, &window->windowed);
 		if (mode->w != desktop_mode.w || mode->h != desktop_mode.h ||
@@ -1049,6 +1061,11 @@ bool SDL_SetWindowSize(SDL_Window *window, int width, int height)
 		return SDL_SetError("no window");
 	if (window->flags & SDL_WINDOW_FULLSCREEN)
 		return true;
+	if (fixed_width > 0)
+	{
+		width = fixed_width;
+		height = fixed_height;
+	}
 	frame.left = 0;
 	frame.top = 0;
 	frame.right = width;
@@ -1273,6 +1290,32 @@ bool SDL_GL_SetAttribute(SDL_GLAttr attribute, int value)
 	return true;
 }
 
+/* the window kept at the drawable's one size, when the hint gives one */
+static void window_size_fix(SDL_Window *window)
+{
+	const char *size = retro_sdl_hint(RETRO_SDL_HINT_GL_FIXED_SIZE);
+	int width = 0, height = 0;
+
+	if (!size || sscanf(size, "%dx%d", &width, &height) != 2 || width <= 0 || height <= 0)
+		return;
+	fixed_width = width;
+	fixed_height = height;
+	window->flags &= ~SDL_WINDOW_RESIZABLE;
+	if (window->flags & SDL_WINDOW_FULLSCREEN)
+	{
+		/* (already fullscreen at the desktop's size: that size's mode now) */
+		if (!window->fullscreen_mode_set && (current_mode.w != width || current_mode.h != height))
+			fullscreen_apply(window, true);
+		return;
+	}
+	if (IsZoomed(window->handle))
+		ShowWindow(window->handle, SW_RESTORE);
+	SetWindowLongA(window->handle, GWL_STYLE, (LONG)(window_style(false, window->flags) |
+		(IsWindowVisible(window->handle) ? WS_VISIBLE : 0)));
+	SDL_SetWindowSize(window, width, height);
+	SetWindowPos(window->handle, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+}
+
 SDL_GLContext SDL_GL_CreateContext(SDL_Window *window)
 {
 	PIXELFORMATDESCRIPTOR format;
@@ -1326,6 +1369,7 @@ SDL_GLContext SDL_GL_CreateContext(SDL_Window *window)
 		SDL_SetError("cannot make the OpenGL context current");
 		return NULL;
 	}
+	window_size_fix(window);
 	return (SDL_GLContext)context;
 }
 
