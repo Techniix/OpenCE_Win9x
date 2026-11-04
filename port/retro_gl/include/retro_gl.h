@@ -292,6 +292,8 @@ extern union retro_gl_page retro_gl_page;
 /* looks every function up and reads the capabilities, the context being
 current; FALSE if OpenGL 1.1's own functions are missing */
 int retro_gl_load(void);
+void retro_gl_window_changed(void);
+void retro_gl_check(void);
 int retro_gl_has_extension(const char *name);
 
 #endif

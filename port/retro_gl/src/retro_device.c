@@ -281,6 +281,8 @@ static void screen_area_update(void)
 	if (width != device.area[4] || height != device.area[5])
 	{
 		platform_log("Direct3D: the window is %dx%d, the screen drawn at %dx%d in it", width, height, fit_width, fit_height);
+		if (device.area[4])
+			retro_gl_window_changed();
 		device.area[4] = width;
 		device.area[5] = height;
 	}
@@ -1156,6 +1158,7 @@ static struct retro_vertex_program *draw_begin(BOOL immediate)
 {
 	struct retro_vertex_program *program = device.fixed_function ? NULL : current_program();
 
+	retro_gl_check();
 	if (!drawing_to_screen() || (device.fixed_function ? !immediate : !program || !program->instruction_count))
 	{
 		if (trace_frame())

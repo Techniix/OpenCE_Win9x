@@ -141,6 +141,13 @@ static void shader_log(unsigned long registers)
 		(unsigned long)D3D__RenderState[D3DRS_PSFINALCOMBINERINPUTSABCD],
 		(unsigned long)D3D__RenderState[D3DRS_PSFINALCOMBINERINPUTSEFG],
 		(unsigned long)D3D__RenderState[D3DRS_PSRGBINPUTS0], (unsigned long)D3D__RenderState[D3DRS_PSRGBOUTPUTS0]);
+	/* (each stage: color inputs and outputs, alpha inputs and outputs) */
+	for (index = 0; index < count && index < 8; index++)
+		platform_log("pixel shader %08lx stage %lu: %08lx %08lx, alpha %08lx %08lx", hash, index,
+			(unsigned long)D3D__RenderState[D3DRS_PSRGBINPUTS0 + index],
+			(unsigned long)D3D__RenderState[D3DRS_PSRGBOUTPUTS0 + index],
+			(unsigned long)D3D__RenderState[D3DRS_PSALPHAINPUTS0 + index],
+			(unsigned long)D3D__RenderState[D3DRS_PSALPHAOUTPUTS0 + index]);
 }
 
 /* ---------- the combiners on the processor (as nv2a_psh.c) */
@@ -371,33 +378,56 @@ static float color_difference(const float *a, const float *b)
 	return difference;
 }
 
-/* whether the shader's result at this vertex changes with the stage's
-texture (white against black) */
-static int stage_matters(const struct retro_vertex *vertex, int stage)
+/* how a unit can give the stage's texture, judged at the draw's first
+vertex: multiplied in, when the result changes with it while the other
+textures are white (t0 * t1 * v0, the most); added, when it changes with it
+only while the others are black (t0 + t1 + t2: the menu's stars, which
+white textures saturate whatever one of them is); or not at all */
+enum
 {
-	float diffuse[4], specular[4], textures[4][4], white[4], black[4];
+	_stage_unused,
+	_stage_modulate,
+	_stage_add
+};
+
+/* the textures' values in the per-vertex evaluation (retro_pixel_vertex_colors):
+white for a texture multiplied in (or one no unit gives), black for one added */
+static float vertex_textures[4][4];
+
+static int stage_kind(const struct retro_vertex *vertex, int stage)
+{
+	float diffuse[4], specular[4], textures[4][4], with[4], without[4];
+	int other, component;
 
 	vertex_inputs(vertex, diffuse, specular);
 	textures_white(textures);
-	combiners_run(diffuse, specular, vertex->fog, (const float (*)[4])textures, white);
-	textures[stage][0] = textures[stage][1] = textures[stage][2] = textures[stage][3] = 0.0f;
-	combiners_run(diffuse, specular, vertex->fog, (const float (*)[4])textures, black);
-	return color_difference(white, black) > 0.004f;
+	combiners_run(diffuse, specular, vertex->fog, (const float (*)[4])textures, with);
+	for (component = 0; component < 4; component++)
+		textures[stage][component] = 0.0f;
+	combiners_run(diffuse, specular, vertex->fog, (const float (*)[4])textures, without);
+	if (color_difference(with, without) > 0.004f)
+		return _stage_modulate;
+	for (other = 0; other < 4; other++)
+		for (component = 0; component < 4; component++)
+			textures[other][component] = 0.0f;
+	combiners_run(diffuse, specular, vertex->fog, (const float (*)[4])textures, without);
+	for (component = 0; component < 4; component++)
+		textures[stage][component] = 1.0f;
+	combiners_run(diffuse, specular, vertex->fog, (const float (*)[4])textures, with);
+	return color_difference(with, without) > 0.004f ? _stage_add : _stage_unused;
 }
 
 void retro_pixel_vertex_colors(struct retro_vertex *vertices, unsigned long count)
 {
-	float textures[4][4];
 	unsigned long vertex;
 
-	textures_white(textures);
 	for (vertex = 0; vertex < count; vertex++)
 	{
 		float diffuse[4], specular[4], result[4];
 		int component;
 
 		vertex_inputs(&vertices[vertex], diffuse, specular);
-		combiners_run(diffuse, specular, vertices[vertex].fog, (const float (*)[4])textures, result);
+		combiners_run(diffuse, specular, vertices[vertex].fog, (const float (*)[4])vertex_textures, result);
 		for (component = 0; component < 4; component++)
 			vertices[vertex].diffuse[component] = (unsigned char)(result[component] * 255.0f + 0.5f);
 	}
@@ -424,7 +454,7 @@ static void unit_select(int unit)
 		RGL.rgl_glActiveTextureARB(RGL_TEXTURE0 + unit);
 }
 
-static void unit_texture(int unit, int stage, const struct retro_texture *texture, int modulate)
+static void unit_texture(int unit, int stage, const struct retro_texture *texture, RGLint environment)
 {
 	const DWORD *state = D3D__TextureState[stage];
 	BOOL linear = state[D3DTSS_MAGFILTER] != D3DTEXF_POINT;
@@ -440,36 +470,58 @@ static void unit_texture(int unit, int stage, const struct retro_texture *textur
 		(linear ? RGL_LINEAR_MIPMAP_LINEAR : RGL_NEAREST_MIPMAP_LINEAR));
 	RGL.rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_WRAP_S, wrap_mode(state[D3DTSS_ADDRESSU]));
 	RGL.rgl_glTexParameteri(RGL_TEXTURE_2D, RGL_TEXTURE_WRAP_T, wrap_mode(state[D3DTSS_ADDRESSV]));
-	RGL.rgl_glTexEnvi(RGL_TEXTURE_ENV, RGL_TEXTURE_ENV_MODE, modulate ? RGL_MODULATE : RGL_REPLACE);
+	RGL.rgl_glTexEnvi(RGL_TEXTURE_ENV, RGL_TEXTURE_ENV_MODE, environment);
 }
 
 int retro_pixel_prepare(struct retro_pixel_setup *setup, const struct retro_vertex *first_vertex)
 {
 	unsigned long registers = shader_registers();
 	DWORD modes = D3D__RenderState[D3DRS_PSTEXTUREMODES];
-	int stage, unit = 0;
+	int kinds[D3DTSS_MAXSTAGES];
+	int stage, unit = 0, pass;
 
 	shader_log(registers);
 	memset(setup, 0, sizeof(*setup));
 	setup->unit_stage[0] = setup->unit_stage[1] = setup->unit_stage[2] = setup->unit_stage[3] = -1;
-	for (stage = 0; stage < D3DTSS_MAXSTAGES && unit < retro_gl_capabilities.texture_units; stage++)
+	textures_white(vertex_textures);
+	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
 	{
 		DWORD mode = (modes >> (stage * 5)) & 0x1f;
-		struct retro_texture texture;
 
+		kinds[stage] = _stage_unused;
 		if (!(registers & (1UL << (_register_t0 + stage))) || mode != _mode_project2d)
 			continue;
-		if (first_vertex && !stage_matters(first_vertex, stage))
-			continue;
-		if (!retro_texture_get(retro_device_texture(stage), retro_device_palette(stage), &texture))
-			continue;
-		/* (each unit multiplies its texture into what the ones before made,
-		the first into the vertices' color: retro_pixel_vertex_colors) */
-		unit_texture(unit, stage, &texture, TRUE);
-		setup->unit_stage[unit] = stage;
-		setup->texture_scale[unit][0] = texture.coordinate_scale[0];
-		setup->texture_scale[unit][1] = texture.coordinate_scale[1];
-		unit++;
+		kinds[stage] = first_vertex ? stage_kind(first_vertex, stage) : _stage_modulate;
+		if (kinds[stage] == _stage_add && !retro_gl_capabilities.env_add)
+			kinds[stage] = _stage_unused;
+		/* (an added texture is black in the vertices' color, given by a unit
+		or, when none is left, left out) */
+		if (kinds[stage] == _stage_add || (first_vertex && kinds[stage] == _stage_unused))
+		{
+			int component;
+
+			for (component = 0; component < 4; component++)
+				vertex_textures[stage][component] = 0.0f;
+		}
+	}
+	/* (the textures multiplied in first, into the vertices' color, then the
+	added ones: base * t0 + t1 + t2) */
+	for (pass = _stage_modulate; pass <= _stage_add; pass++)
+	{
+		for (stage = 0; stage < D3DTSS_MAXSTAGES && unit < retro_gl_capabilities.texture_units; stage++)
+		{
+			struct retro_texture texture;
+
+			if (kinds[stage] != pass)
+				continue;
+			if (!retro_texture_get(retro_device_texture(stage), retro_device_palette(stage), &texture))
+				continue;
+			unit_texture(unit, stage, &texture, pass == _stage_add ? RGL_ADD : RGL_MODULATE);
+			setup->unit_stage[unit] = stage;
+			setup->texture_scale[unit][0] = texture.coordinate_scale[0];
+			setup->texture_scale[unit][1] = texture.coordinate_scale[1];
+			unit++;
+		}
 	}
 	setup->units = unit;
 	/* (the units the draw leaves out, off) */
