@@ -20,6 +20,7 @@ Nothing here reads or writes the game's state.
 
 /* port_config.c's */
 long config_integer(const char *name);
+const char *config_string(const char *name);
 /* the performance counter (the Xbox kernel's, port/linux/src/xbox_kernel.c, or kernel32's): a 64-bit count
 and its frequency, which LARGE_INTEGER's QuadPart is */
 int __stdcall QueryPerformanceCounter(long long *count);
@@ -57,6 +58,10 @@ static double result_rate;
 static double run_start;
 static double run_seconds;
 static unsigned long run_frames;
+/* the audio mixer's (its own thread, so not among the steps): seconds it was busy, and seconds of sound it made,
+since the last report */
+static volatile double audio_busy;
+static volatile double audio_made;
 
 /* ---------- private code */
 
@@ -104,6 +109,27 @@ static int step_compare(const void *a, const void *b)
 	return x < y ? 1 : x > y ? -1 : 0;
 }
 
+/* one line of BENCH.TXT (debug.bench_label): the label, the rate, the frame's time, the mixer's share and the
+biggest steps, to send back as a file that compares runs */
+static void bench_line(const char *label, double elapsed, double total, double audio_percent)
+{
+	FILE *file = fopen("BENCH.TXT", "a");
+	int index;
+
+	if (!file)
+		return;
+	fprintf(file, "%s | %.2f fps | %.1f ms | audio %.1f%% |", label, window_frames / elapsed,
+		total * 1000.0 / window_frames, audio_percent);
+	for (index = 0; index < step_count && index < 4; index++)
+	{
+		if (steps[index].seconds * 1000.0 / window_frames < 0.005)
+			break;
+		fprintf(file, " %s %.1f;", steps[index].name, steps[index].seconds * 1000.0 / window_frames);
+	}
+	fprintf(file, "\n");
+	fclose(file);
+}
+
 static void report(double elapsed)
 {
 	double total = 0.0;
@@ -126,7 +152,19 @@ static void report(double elapsed)
 			platform_log("budget: %8.2f ms %5.1f%%  %s", steps[index].seconds * 1000.0 / window_frames,
 				steps[index].seconds * 100.0 / total, steps[index].name);
 		}
+		{
+			double busy = audio_busy, made = audio_made, percent = made > 0.0 ? busy * 100.0 / made : 0.0;
+			const char *label = config_string("debug.bench_label");
+
+			if (made > 0.0)
+				platform_log("budget: the audio mixer (its own thread, beside the steps) used %.1f%% of real time"
+					" for %.1f s of sound%s", percent, made, percent > 60.0 ? ": too much for this machine" : "");
+			if (label && label[0])
+				bench_line(label, elapsed, total, percent);
+		}
 	}
+	audio_busy = 0.0;
+	audio_made = 0.0;
 	step_count = 0;
 	current = -1;
 	window_frames = 0;
@@ -192,4 +230,17 @@ double halo_budget_result(void)
 	if (result_rate > 0.0)
 		return result_rate;
 	return run_seconds > 0.0 ? run_frames / run_seconds : 0.0;
+}
+
+double halo_budget_clock(void)
+{
+	return window_start == 0.0 ? 0.0 : clock_seconds();
+}
+
+void halo_budget_audio(double started, double seconds_of_sound)
+{
+	if (started == 0.0 || window_start == 0.0)
+		return;
+	audio_busy += clock_seconds() - started;
+	audio_made += seconds_of_sound;
 }

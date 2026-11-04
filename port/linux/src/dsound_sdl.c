@@ -62,6 +62,10 @@ skips opening a device; audio.channels chooses stereo or 5.1
 #include <time.h>
 #include <unistd.h>
 
+/* port/linux/game/frame_budget.c's (debug.frame_budget): the mixer's time, for the log */
+double halo_budget_clock(void);
+void halo_budget_audio(double started, double seconds_of_sound);
+
 #define MAXIMUM_OUTPUT_RATE 48000 /* what the buffers are sized for */
 #define MINIMUM_OUTPUT_RATE 8000
 #define OUTPUT_CHANNELS 2 /* the stereo mix's, and the reverb's outputs */
@@ -1548,6 +1552,7 @@ static void mix(float *output, unsigned long frames)
 	DSI3DL2LISTENER properties;
 	BOOL enabled = reverb_enabled, changed = FALSE;
 	unsigned long serial = 0;
+	double started = halo_budget_clock();
 
 	memset(output, 0, frames * output_channels * sizeof(float));
 	memset(reverb.send, 0, frames * sizeof(float));
@@ -1594,6 +1599,7 @@ static void mix(float *output, unsigned long frames)
 		voice_audio_mix_at(output, frames, output_rate);
 	}
 	limit(output, frames);
+	halo_budget_audio(started, (double)frames / (double)output_rate);
 }
 
 /* ---------- output */

@@ -1266,6 +1266,10 @@ static const struct config_setting config_settings[] =
 		"Every this many seconds, write to the log where a frame's time went (the main loop's steps and the\n"
 		"render passes, in milliseconds a frame), 0 off. Only reads the clock: the game and the picture are\n"
 		"not changed (port/linux/game/frame_budget.c)." },
+	{ "debug.bench_label", _config_string, "\"\"", "HALO_BENCH_LABEL", _environment_value, _platform_all,
+		"With debug.frame_budget: a name for this run; each report then also adds a line (the name, frames a\n"
+		"second, a frame's time, the audio mixer's share, the biggest steps) to BENCH.TXT beside the game, for\n"
+		"comparing runs in one file (port/win98/tools/make_benchall.py)." },
 	{ "debug.gpu_stats", _config_boolean, "false", "HALO_GPU_STATS", _environment_set_is_true, _platform_all,
 		"Log the renderer's draw counts once a second." },
 	{ "debug.gpu_trace_frame", _config_integer, "-1", "HALO_GPU_TRACE", _environment_value, _platform_all,

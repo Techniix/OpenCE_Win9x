@@ -23,4 +23,9 @@ void halo_budget_enter(const char *name);
 window's benchmark tells at the end of its run */
 double halo_budget_result(void);
 
+/* the audio mixer's share (its thread is not among the steps): halo_budget_clock() before a mix (0.0 when the
+budget is off), halo_budget_audio(that, seconds of sound the mix made) after it */
+double halo_budget_clock(void);
+void halo_budget_audio(double started, double seconds_of_sound);
+
 #endif

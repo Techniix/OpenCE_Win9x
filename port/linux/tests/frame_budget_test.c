@@ -11,6 +11,7 @@ static long fake_window = 2;
 int QueryPerformanceCounter(long long *count) { *count = fake_ticks; return 1; }
 int QueryPerformanceFrequency(long long *frequency) { *frequency = 1000000; return 1; }
 long config_integer(const char *name) { (void)name; return fake_window; }
+const char *config_string(const char *name) { (void)name; return "testrun"; }
 static char log_text[4096];
 void platform_log(const char *format, ...)
 {
@@ -38,6 +39,15 @@ int main(void)
 		fake_ticks += 30000;
 		halo_budget_enter("throttle (waiting)");
 		fake_ticks += 10000;
+		/* the mixer: 25 ms of work for 100 ms of sound */
+		{
+			double started = halo_budget_clock();
+
+			fake_ticks += 25000;
+			halo_budget_audio(started, 0.1);
+			/* (another thread's time: not the main loop's) */
+			fake_ticks -= 25000;
+		}
 	}
 	fputs(log_text, stdout);
 	if (!strstr(log_text, "game simulation") || !strstr(log_text, "60.00 ms"))
@@ -49,6 +59,27 @@ int main(void)
 	{
 		puts("FAIL: the other steps or the frame total");
 		failures++;
+	}
+	if (!strstr(log_text, "audio mixer") || !strstr(log_text, "25.0% of real time"))
+	{
+		puts("FAIL: the audio mixer's share");
+		failures++;
+	}
+	{
+		FILE *bench = fopen("BENCH.TXT", "r");
+		char line[256] = "";
+
+		if (bench)
+		{
+			fgets(line, sizeof(line), bench);
+			fclose(bench);
+			remove("BENCH.TXT");
+		}
+		if (strncmp(line, "testrun | ", 10) || !strstr(line, "audio 25.0%"))
+		{
+			puts("FAIL: BENCH.TXT line");
+			failures++;
+		}
 	}
 	fake_window = 0;
 	log_text[0] = 0;
