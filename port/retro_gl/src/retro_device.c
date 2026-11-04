@@ -1092,8 +1092,11 @@ static BOOL trace_frame(void)
 	return (frame >= 0 && (unsigned long)frame == device.frame) || device.frame == trace_requested;
 }
 
+void halo_budget_enter(const char *name);
+
 void halo_render_pass(const char *name)
 {
+	halo_budget_enter(name);
 	if (trace_frame())
 		platform_log("trace pass: %s", name);
 }

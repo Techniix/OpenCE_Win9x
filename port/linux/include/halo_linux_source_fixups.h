@@ -117,6 +117,10 @@ float halo_render_lod_scale(void);
 unsigned char halo_render_visibility_pvs(void);
 /* once for each frame (render_frame): render.adaptive_fps's governor of the performance level */
 void halo_render_governor_frame(void);
+/* debug.frame_budget (port/linux/game/frame_budget.c): a frame of the main loop begins; a step of it
+(or a render pass) begins */
+void halo_budget_frame(void);
+void halo_budget_enter(const char *name);
 /* network.client_timeout_seconds, in milliseconds (port/linux/src/port_config.c) */
 unsigned long network_client_timeout_milliseconds(void);
 /* a dedicated server (halo --server: port/linux/src/server_mode.c,

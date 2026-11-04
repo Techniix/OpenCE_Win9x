@@ -3565,6 +3565,9 @@ static boolean main_loop_iteration(
 			main_reset_map_private();
 		}
 
+		/* port: debug.frame_budget's steps (port/linux/game/frame_budget.c) */
+		halo_budget_frame();
+		halo_budget_enter("input and events");
 		profile_frame_start();
 		profile_scope_enter(main_input_section)
 		input_frame_begin();
@@ -3580,6 +3583,7 @@ static boolean main_loop_iteration(
 		if (!shell_application_is_paused())
 		{
 			render_frame = TRUE;
+			halo_budget_enter("network and timing");
 
 			/* automated system link tests (port/linux/game/network_test.c) */
 			network_test_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);
@@ -3640,6 +3644,7 @@ static boolean main_loop_iteration(
 			{
 				profile_scope(main_update_time_section, main_update_time();)
 			}
+			halo_budget_enter("menus");
 			profile_scope_enter(main_ui_update_section)
 			process_ui_widgets();
 			bink_playback_update();
@@ -3659,6 +3664,7 @@ static boolean main_loop_iteration(
 				}
 			}
 
+			halo_budget_enter("game controls");
 			if (game_in_progress())
 			{
 				terminal_update();
@@ -3680,6 +3686,7 @@ static boolean main_loop_iteration(
 					}
 					profile_scope_exit(main_network_end_frame_section)
 
+					halo_budget_enter("game simulation");
 					profile_scope(main_game_time_update_section,
 						game_time_update((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);)
 
@@ -3691,6 +3698,7 @@ static boolean main_loop_iteration(
 						render_frame = main_globals.main_menu_scenario_loaded || main_globals.halt_time_scale;
 					render_frame &= !game_engine_running() || game_time_get()>=3;
 
+					halo_budget_enter("camera and director");
 					profile_scope_enter(main_non_deterministic_update_section)
 					collision_log_continue_period(1);
 					director_update((real)main_globals.halt_time_scale*main_globals.seconds_elapsed);
@@ -3707,6 +3715,7 @@ static boolean main_loop_iteration(
 
 				if (render_frame && !debug_no_drawing)
 				{
+					halo_budget_enter("render setup");
 					profile_render_start();
 					render_interpolation_frame_begin();
 					main_game_render((double)main_globals.seconds_elapsed);
@@ -3717,20 +3726,24 @@ static boolean main_loop_iteration(
 			/* port: nothing drawn on a dedicated server, nor waited for */
 			else if (!halo_server_mode())
 			{
+				halo_budget_enter("menu render");
 				profile_render_start();
 				main_pregame_render();
 				profile_render_end();
 			}
 
+			halo_budget_enter("throttle (waiting)");
 			if (!halo_server_mode())
 				profile_scope(main_throttle_section, main_rasterizer_throttle();)
 
 			if (render_frame && !debug_no_drawing)
 			{
+				halo_budget_enter("present (swap)");
 				profile_scope(main_present_section, main_present_frame();)
 			}
 		}
 
+		halo_budget_enter("frame end");
 		input_frame_end();
 		profile_frame_end();
 		main_frame_rate_debug();
