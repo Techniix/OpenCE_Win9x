@@ -105,6 +105,10 @@ static const struct config_setting config_settings[] =
 		"bsp_specular_lightmaps, bsp_reflection_masks, bsp_reflection_mirrors, bsp_reflections, bsp_fog,\n"
 		"detail_objects, fog_screen, decals_light, decals_alpha_tested, decals_primary, decals_secondary,\n"
 		"decals_water. Other names are ignored. Only the picture changes." },
+	{ "render.visibility", _config_string, "\"portals\"", "HALO_RENDER_VISIBILITY", _environment_value, _platform_all,
+		"Which clusters a window draws: \"portals\", those the portals show from the eye (the game's own), or\n"
+		"\"pvs\", the cluster's stored potentially visible set, a lighter search that draws more. Only the\n"
+		"picture changes." },
 	{ "render.lod_scale", _config_real, "1.0", "HALO_RENDER_LOD_SCALE", _environment_value, _platform_all,
 		"The factor an object's size on the screen is multiplied by to choose its level of detail: below 1\n"
 		"the coarser levels are used sooner (0.05 to 4). Only the picture changes." },

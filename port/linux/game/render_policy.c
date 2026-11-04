@@ -85,6 +85,18 @@ unsigned char halo_render_pass_enabled(const char *name)
 	return TRUE;
 }
 
+/* whether the clusters in view are the cluster's stored potentially visible
+set (render.visibility = "pvs") rather than those the portals show: the
+game's own structures_use_pvs_for_vs (structure_visibility.c), which draws
+more clusters for a lighter traversal. Only the picture changes: the stored
+set is read by the game's other systems too (AI, sound, objects), unchanged */
+unsigned char halo_render_visibility_pvs(void)
+{
+	const char *mode = config_string("render.visibility");
+
+	return mode && !strcmp(mode, "pvs");
+}
+
 /* the factor an object's size on the screen is multiplied by to choose its
 level of detail (render_objects.c): below 1 the objects use the coarser levels
 sooner */

@@ -351,6 +351,9 @@ static void render_window(
 	parameters.window_index = render.window_index;
 	parameters.fog = render.fog;
 
+	/* port: render.visibility */
+	if (halo_render_visibility_pvs())
+		structures_use_pvs_for_vs = TRUE;
 	structure_visibility_compute();
 	player_effect_get_screen_flash(local_player_index, &parameters.screen_flash);
 	rasterizer_window_begin(&parameters);
