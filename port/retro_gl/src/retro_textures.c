@@ -23,6 +23,7 @@ decoded here too (hud_hires_png_texture, as port/linux/src/hud_hires.c does).
 #include "retro_internal.h"
 #include "xgpu.h"
 #include "menu_files.h"
+#include "port_config.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -508,7 +509,7 @@ static unsigned long power_of_two_at_most(unsigned long value)
 card's largest: halved by averaging while it is twice that or more, else
 resampled (point sampled: a linear texture's odd sizes, the menus' art) */
 static unsigned char *texels_fit(const unsigned long *argb_texels, unsigned long width, unsigned long height,
-	unsigned long *fit_width, unsigned long *fit_height)
+	unsigned long *fit_width, unsigned long *fit_height, unsigned long drop)
 {
 	unsigned long maximum = (unsigned long)retro_gl_capabilities.maximum_texture_size;
 	unsigned long target_width = power_of_two_at_most(width), target_height = power_of_two_at_most(height);
@@ -523,6 +524,14 @@ static unsigned char *texels_fit(const unsigned long *argb_texels, unsigned long
 		target_width /= 2;
 	while (target_height > maximum)
 		target_height /= 2;
+	/* render.texture_detail: that many halvings more, as Quake's gl_picmip, but never
+	to under 16 texels a side */
+	while (drop && target_width >= 32 && target_height >= 32)
+	{
+		target_width /= 2;
+		target_height /= 2;
+		drop--;
+	}
 	rgba = malloc(target_width * target_height * 4);
 	if (!rgba)
 		return NULL;
@@ -694,7 +703,11 @@ static void entry_upload(struct texture_entry *entry, const struct xgpu_texture_
 		entry->failed = TRUE;
 		return;
 	}
-	rgba = texels_fit(argb_texels, description->width, description->height, &fit_width, &fit_height);
+	/* (render.texture_detail: the textures with mip levels, the world's, not the HUD's and the
+	text's, which have none; read as a texture is loaded, so a change reaches those loaded after) */
+	rgba = texels_fit(argb_texels, description->width, description->height, &fit_width, &fit_height,
+		description->levels > 1 ? (unsigned long)(config_integer("render.texture_detail") < 0 ? 0 :
+		config_integer("render.texture_detail") > 3 ? 3 : config_integer("render.texture_detail")) : 0);
 	free(argb_texels);
 	if (!rgba)
 	{
@@ -943,7 +956,7 @@ unsigned int hud_hires_png_texture(const void *png, unsigned long size, unsigned
 			pixels[index * 4 + 2]);
 	}
 	free(pixels);
-	rgba = texels_fit(argb_texels, width, height, &fit_width, &fit_height);
+	rgba = texels_fit(argb_texels, width, height, &fit_width, &fit_height, 0);
 	free(argb_texels);
 	if (!rgba)
 		return 0;

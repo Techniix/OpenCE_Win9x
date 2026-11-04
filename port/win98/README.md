@@ -139,6 +139,18 @@ Its sliders write the same settings, in the same steps, as Video Setup,
 Performance in the game (`tools/port_settings.py`); `launcher_test.py`
 checks that the lists of passes agree.
 
+## Detail while playing
+
+The setup window's Texture detail, Keep up and Brightness sliders write
+`render.texture_detail`, `render.adaptive_fps` and `render.gamma` (the same
+stops as Video Setup, Performance). In a game, Ctrl+Minus and Ctrl+Equals step
+the detail level down and up by hand (`render.hotkeys`), and with Keep up on
+the level follows the frame rate by itself (`port/linux/game/render_policy.c`).
+None of this has run on Windows 9x yet: the window's layout (two toggles to a
+row, three more sliders), the gamma ramp and the hotkeys are compile-checked
+only. The window is taller than before; if it does not fit 640 by 480, the
+layout in `win9x_launcher.c` is what to change.
+
 ## Building
 
     python3 configure.py --window-base 0x20000000   # the game's flags, its window moved

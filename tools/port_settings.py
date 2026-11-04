@@ -340,7 +340,15 @@ SCREENS["video_settings/performance"] = {
          [("FULL", "1"), ("75%", "0.75"), ("50%", "0.5"), ("35%", "0.35"), ("25%", "0.25"), ("15%", "0.15")],
          "Objects use their coarser models sooner, and small\nfar ones vanish. Full: as the game chooses.", None),
         ("VISIBILITY:", "render.visibility", [("PORTALS", "portals"), ("PVS", "pvs")],
-         "Which rooms are drawn. Portals: those the doors\nshow. PVS: the map's stored set; a lighter search.", None),
+         "Which rooms are drawn. Portals: those the doors\nshow. PVS: the map's stored set; a lighter search.", None),        ("KEEP UP:", "render.adaptive_fps",
+         [("OFF", "0"), ("20 FPS", "20"), ("25 FPS", "25"), ("30 FPS", "30"), ("40 FPS", "40")],
+         "Lowers the detail a step at a time to hold this frame\nrate, and raises it again. Ctrl+Minus/Equals by hand.", None),
+        ("TEXTURE DETAIL:", "render.texture_detail",
+         [("FULL", "0"), ("HALF", "1"), ("QUARTER", "2"), ("EIGHTH", "3")],
+         "Smaller world textures: less video memory. Applies\nto textures loaded after the change (next map).", None),
+        ("BRIGHTNESS:", "render.gamma",
+         [("0.7", "0.7"), ("0.85", "0.85"), ("1.0", "1.0"), ("1.2", "1.2"), ("1.4", "1.4"), ("1.7", "1.7")],
+         "The display's gamma, for a screen darker than the\nXbox's television. 1.0 leaves it alone.", None),
     ],
 }
 _video["categories"] = [

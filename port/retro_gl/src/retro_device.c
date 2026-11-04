@@ -1623,6 +1623,7 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		}
 	}
 	trace_key_check();
+	retro_gamma_update();
 	device.frame++;
 	retro_textures_begin_frame(device.frame);
 	platform_pump_events();

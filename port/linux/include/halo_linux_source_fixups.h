@@ -115,6 +115,8 @@ and render.lod_scale, the factor of an object's size for its level of detail */
 unsigned char halo_render_pass_enabled(const char *name);
 float halo_render_lod_scale(void);
 unsigned char halo_render_visibility_pvs(void);
+/* once for each frame (render_frame): render.adaptive_fps's governor of the performance level */
+void halo_render_governor_frame(void);
 /* network.client_timeout_seconds, in milliseconds (port/linux/src/port_config.c) */
 unsigned long network_client_timeout_milliseconds(void);
 /* a dedicated server (halo --server: port/linux/src/server_mode.c,

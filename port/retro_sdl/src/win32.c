@@ -350,6 +350,42 @@ bool SDL_RenamePath(const char *old_path, const char *new_path)
 	return SDL_SetError("cannot rename %s", old_path);
 }
 
+/* the display's gamma ramp: gdi32's, which Windows 95 and up have. The display's own is kept the first time and put back as the program ends */
+static unsigned short original_ramp[3][256];
+static bool original_ramp_kept;
+
+static void gamma_ramp_restore(void)
+{
+	HDC dc;
+
+	if (!original_ramp_kept)
+		return;
+	dc = GetDC(NULL);
+	if (dc)
+	{
+		SetDeviceGammaRamp(dc, original_ramp);
+		ReleaseDC(NULL, dc);
+	}
+}
+
+bool retro_sdl_set_gamma_ramp(const unsigned short ramp[3][256])
+{
+	HDC dc = GetDC(NULL);
+	bool done = false;
+
+	if (dc)
+	{
+		if (!original_ramp_kept && GetDeviceGammaRamp(dc, original_ramp))
+		{
+			original_ramp_kept = true;
+			atexit(gamma_ramp_restore);
+		}
+		done = SetDeviceGammaRamp(dc, (void *)ramp) != 0;
+		ReleaseDC(NULL, dc);
+	}
+	return done;
+}
+
 bool retro_sdl_list_directory(const char *path, void (*add)(void *context, const char *name), void *context)
 {
 	char pattern[MAX_PATH + 4];

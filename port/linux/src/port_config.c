@@ -117,6 +117,20 @@ static const struct config_setting config_settings[] =
 		"Which clusters a window draws: \"portals\", those the portals show from the eye (the game's own), or\n"
 		"\"pvs\", the cluster's stored potentially visible set, a lighter search that draws more. Only the\n"
 		"picture changes." },
+	{ "render.adaptive_fps", _config_integer, "0", "HALO_RENDER_ADAPTIVE_FPS", _environment_value, _platform_all,
+		"Keep the frame rate at least this by lowering the picture's detail a level at a time (the objects'\n"
+		"detail scale, then the passes of render.skip_passes), and raising it again when there is room; 0\n"
+		"off. Only the picture changes: if the game itself is what holds the processor, no level helps." },
+	{ "render.hotkeys", _config_boolean, "true", "HALO_RENDER_HOTKEYS", _environment_value, _platform_all,
+		"Ctrl+Minus and Ctrl+Equals in a game step the picture's detail down and up (Quake's +/-), for when\n"
+		"the menus are too slow to use." },
+	{ "render.texture_detail", _config_integer, "0", "HALO_RENDER_TEXTURE_DETAIL", _environment_value, _platform_all,
+		"The OpenGL 1.1 renderer's textures with mip levels (the world's) made this many halvings smaller, 0\n"
+		"to 3, as Quake's gl_picmip: less video memory and bandwidth. The HUD and text are not changed.\n"
+		"Read as a texture is loaded: those already loaded keep their size." },
+	{ "render.gamma", _config_real, "1.0", "HALO_RENDER_GAMMA", _environment_value, _platform_all,
+		"The display's brightness, 0.5 to 2.0, for the OpenGL 1.1 renderer on Windows (the display's gamma\n"
+		"ramp, put back as the game ends). 1.0 leaves the display alone." },
 	{ "render.lod_scale", _config_real, "1.0", "HALO_RENDER_LOD_SCALE", _environment_value, _platform_all,
 		"The factor an object's size on the screen is multiplied by to choose its level of detail: below 1\n"
 		"the coarser levels are used sooner (0.05 to 4). Only the picture changes." },

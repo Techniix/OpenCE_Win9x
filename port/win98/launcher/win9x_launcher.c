@@ -59,6 +59,9 @@ enum
 	SLIDER_DETAIL,
 	SLIDER_EXTRAS,
 	SLIDER_FPS,
+	SLIDER_TEXTURES,
+	SLIDER_KEEP_UP,
+	SLIDER_BRIGHTNESS,
 	SLIDER_COUNT
 };
 
@@ -185,6 +188,16 @@ static const char *slider_text(int which, int position, char *text)
 		return text;
 	case SLIDER_EXTRAS:
 		return launcher_extras_name(position);
+	case SLIDER_TEXTURES:
+		return launcher_texture_name(position);
+	case SLIDER_KEEP_UP:
+		if (!position)
+			return "Off";
+		sprintf(text, "%d frames a second", launcher_keep_up_fps(position));
+		return text;
+	case SLIDER_BRIGHTNESS:
+		sprintf(text, "%d%%", position * LAUNCHER_BRIGHTNESS_STEP);
+		return text;
 	default:
 		return launcher_fps_name(position);
 	}
@@ -223,6 +236,9 @@ static void show_choices(const struct launcher_choices *choices)
 	slider_set(SLIDER_DETAIL, choices->detail_percent / LAUNCHER_DETAIL_STEP);
 	slider_set(SLIDER_EXTRAS, choices->extras_stop);
 	slider_set(SLIDER_FPS, choices->fps_stop);
+	slider_set(SLIDER_TEXTURES, choices->texture_detail);
+	slider_set(SLIDER_KEEP_UP, launcher_keep_up_stop(choices->keep_up));
+	slider_set(SLIDER_BRIGHTNESS, choices->brightness / LAUNCHER_BRIGHTNESS_STEP);
 	SendMessageA(mode_combo, CB_SETCURSEL, (WPARAM)choices->display_mode, 0);
 	SendMessageA(toggles[ID_VSYNC - ID_VSYNC], BM_SETCHECK, choices->vsync, 0);
 	SendMessageA(toggles[ID_SMOOTH - ID_VSYNC], BM_SETCHECK, choices->smooth_motion, 0);
@@ -240,6 +256,9 @@ static void collect_choices(struct launcher_choices *choices)
 	choices->detail_percent = slider_get(SLIDER_DETAIL) * LAUNCHER_DETAIL_STEP;
 	choices->extras_stop = slider_get(SLIDER_EXTRAS);
 	choices->fps_stop = slider_get(SLIDER_FPS);
+	choices->texture_detail = slider_get(SLIDER_TEXTURES);
+	choices->keep_up = launcher_keep_up_fps(slider_get(SLIDER_KEEP_UP));
+	choices->brightness = slider_get(SLIDER_BRIGHTNESS) * LAUNCHER_BRIGHTNESS_STEP;
 	choices->vsync = (int)SendMessageA(toggles[ID_VSYNC - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
 	choices->smooth_motion = (int)SendMessageA(toggles[ID_SMOOTH - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
 	choices->pvs_visibility = (int)SendMessageA(toggles[ID_PVS - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -402,9 +421,8 @@ static int run_window(const char *notice, struct launcher_choices *choices, int 
 	MSG message;
 	RECT rect;
 	int y = 10, index, screen_x, screen_y, height = 470;
-	static const char *const toggle_texts[] = { "Wait for the display (V-Sync)", "Smooth motion (60 frames a second)",
-		"Draw rooms by the map's stored sets (PVS): lighter", "Room reverb", "Fast sound mixing", "Sound",
-		"Show this window at the next start" };
+	static const char *const toggle_texts[] = { "V-Sync", "Smooth motion", "Stored room sets (PVS)",
+		"Room reverb", "Fast sound mixing", "Sound", "Show this window at the next start" };
 
 	memset(&wc, 0, sizeof(wc));
 	wc.lpfnWndProc = window_proc;
@@ -460,12 +478,25 @@ static int run_window(const char *notice, struct launcher_choices *choices, int 
 	make_slider(SLIDER_EXTRAS, "Extras drawn:", 0, LAUNCHER_EXTRAS_STOPS - 1, 1, y);
 	y += ROW_HEIGHT;
 	make_slider(SLIDER_FPS, "Frame rate limit:", 0, LAUNCHER_FPS_STOPS - 1, 1, y);
+	y += ROW_HEIGHT;
+	make_slider(SLIDER_TEXTURES, "Texture detail:", 0, LAUNCHER_TEXTURE_STOPS - 1, 1, y);
+	y += ROW_HEIGHT;
+	make_slider(SLIDER_KEEP_UP, "Keep up (auto detail):", 0, LAUNCHER_KEEP_UP_STOPS - 1, 1, y);
+	y += ROW_HEIGHT;
+	make_slider(SLIDER_BRIGHTNESS, "Brightness:", LAUNCHER_BRIGHTNESS_MINIMUM / LAUNCHER_BRIGHTNESS_STEP,
+		LAUNCHER_BRIGHTNESS_MAXIMUM / LAUNCHER_BRIGHTNESS_STEP, 1, y);
 	y += ROW_HEIGHT + 6;
+	/* (the short toggles two to a row, to keep the window short for a 640 by 480 screen) */
 	for (index = 0; index < ID_NEXT_START - ID_VSYNC + 1; index++)
 	{
-		toggles[index] = make("BUTTON", toggle_texts[index], BS_AUTOCHECKBOX | WS_TABSTOP, LEFT, y,
-			WINDOW_WIDTH - 2 * LEFT, 20, ID_VSYNC + index);
-		y += 22;
+		int last = index == ID_NEXT_START - ID_VSYNC;
+		int column = last ? 0 : index % 2;
+
+		toggles[index] = make("BUTTON", toggle_texts[index], BS_AUTOCHECKBOX | WS_TABSTOP,
+			LEFT + column * (WINDOW_WIDTH - 2 * LEFT) / 2, y,
+			last ? WINDOW_WIDTH - 2 * LEFT : (WINDOW_WIDTH - 2 * LEFT) / 2 - 4, 20, ID_VSYNC + index);
+		if (last || column)
+			y += 22;
 	}
 	y += 10;
 	make("BUTTON", "Play", BS_DEFPUSHBUTTON | WS_TABSTOP, LEFT, y, 100, 28, ID_PLAY);

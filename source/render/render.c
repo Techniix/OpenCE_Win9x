@@ -647,6 +647,8 @@ void render_frame(
 	point2d screenshot_combined_index;
 
 	render.frame_index++;
+	/* port: render.adaptive_fps */
+	halo_render_governor_frame();
 	render.time_delta_since_tick_sec = time_delta_since_tick_sec;
 	memset(&parameters, 0, sizeof(parameters));
 	/* continuous between ticks (render_interpolation.c) */

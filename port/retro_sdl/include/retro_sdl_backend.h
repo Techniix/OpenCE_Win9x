@@ -28,6 +28,12 @@ the window grows) */
 folder cannot be read */
 bool retro_sdl_list_directory(const char *path, void (*add)(void *context, const char *name), void *context);
 
+/* the display's gamma ramp (red, green, blue: 256 entries each, 0 to 65535),
+which render.gamma sets (port/retro_gl/src/retro_gamma.c); the display's own is
+put back as the program ends. False where the display or the system does not
+take one (Windows 98 has the call; a card in fullscreen may ignore it) */
+bool retro_sdl_set_gamma_ramp(const unsigned short ramp[3][256]);
+
 /* ---------- common.c's */
 
 /* a hint's value (SDL_SetHint), or NULL */

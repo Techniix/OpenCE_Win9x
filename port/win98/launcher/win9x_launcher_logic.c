@@ -9,6 +9,7 @@ See win9x_launcher_logic.h.
 #include <string.h>
 
 #include "win9x_launcher_logic.h"
+#include "../../linux/include/halo_render_stages.h"
 
 /* ---------- the stops */
 
@@ -20,14 +21,13 @@ static const int fps_values[LAUNCHER_FPS_STOPS] = { 30, 60, 120, -1 };
 static const char *const fps_names[LAUNCHER_FPS_STOPS] = { "30", "60", "120", "None" };
 
 /* the lists of render.skip_passes, as Video Setup, Performance has them
-(tools/port_settings.py _SKIP_*; launcher_test.py checks that they agree) */
-#define SKIP_SHINY \
-	"lights_specular,bsp_specular_lightmaps,bsp_reflection_masks,bsp_reflection_mirrors,bsp_reflections"
-#define SKIP_SOME SKIP_SHINY ",object_shadows,decals_light,decals_alpha_tested,detail_objects"
-#define SKIP_MOST SKIP_SOME ",decals_primary,decals_secondary,decals_water,bsp_fog,fog_screen"
-static const char *const extras_values[LAUNCHER_EXTRAS_STOPS] = { "", SKIP_SHINY, SKIP_SOME, SKIP_MOST };
+(halo_render_stages.h; launcher_test.py checks the menu's) */
+static const char *const extras_values[LAUNCHER_EXTRAS_STOPS] = { "", HALO_SKIP_SHINY, HALO_SKIP_SOME, HALO_SKIP_MOST };
 static const char *const extras_names[LAUNCHER_EXTRAS_STOPS] =
 	{ "All", "No shine", "Fewer", "Bare" };
+
+static const char *const texture_names[LAUNCHER_TEXTURE_STOPS] = { "Full", "Half", "Quarter", "Eighth" };
+static const int keep_up_values[LAUNCHER_KEEP_UP_STOPS] = { 0, 20, 25, 30, 40 };
 
 static const char *const preset_names[LAUNCHER_PRESET_COUNT] = { "Fastest", "Fast", "Balanced", "Best" };
 
@@ -53,10 +53,36 @@ const char *launcher_extras_name(int stop)
 	return stop >= 0 && stop < LAUNCHER_EXTRAS_STOPS ? extras_names[stop] : "";
 }
 
+const char *launcher_texture_name(int stop)
+{
+	return stop >= 0 && stop < LAUNCHER_TEXTURE_STOPS ? texture_names[stop] : "";
+}
+
+int launcher_keep_up_fps(int stop)
+{
+	return stop >= 0 && stop < LAUNCHER_KEEP_UP_STOPS ? keep_up_values[stop] : 0;
+}
+
+int launcher_keep_up_stop(int fps)
+{
+	int index, best = 0;
+
+	for (index = 1; index < LAUNCHER_KEEP_UP_STOPS; index++)
+	{
+		int gap = fps > keep_up_values[index] ? fps - keep_up_values[index] : keep_up_values[index] - fps;
+		int best_gap = fps > keep_up_values[best] ? fps - keep_up_values[best] : keep_up_values[best] - fps;
+
+		if (gap < best_gap)
+			best = index;
+	}
+	return best;
+}
+
 void launcher_preset(int preset, struct launcher_choices *choices)
 {
 	memset(choices, 0, sizeof(*choices));
 	choices->sound = 1;
+	choices->brightness = 100;
 	switch (preset)
 	{
 	case LAUNCHER_PRESET_FASTEST:
@@ -69,6 +95,8 @@ void launcher_preset(int preset, struct launcher_choices *choices)
 		choices->fps_stop = 0;
 		choices->pvs_visibility = 1;
 		choices->fast_mixing = 1;
+		choices->texture_detail = 2;
+		choices->keep_up = 25;
 		break;
 	case LAUNCHER_PRESET_FAST:
 		choices->scale_stop = 3;
@@ -76,6 +104,8 @@ void launcher_preset(int preset, struct launcher_choices *choices)
 		choices->extras_stop = 2;
 		choices->fps_stop = 0;
 		choices->fast_mixing = 1;
+		choices->texture_detail = 1;
+		choices->keep_up = 30;
 		break;
 	case LAUNCHER_PRESET_BALANCED:
 		choices->scale_stop = 4;
@@ -133,6 +163,15 @@ void launcher_apply(const struct launcher_choices *choices, launcher_write write
 	write("render.skip_passes", extras_values[choices->extras_stop >= 0 &&
 		choices->extras_stop < LAUNCHER_EXTRAS_STOPS ? choices->extras_stop : 0]);
 	write("render.visibility", choices->pvs_visibility ? "pvs" : "portals");
+	sprintf(text, "%d", choices->texture_detail < 0 ? 0 :
+		choices->texture_detail >= LAUNCHER_TEXTURE_STOPS ? LAUNCHER_TEXTURE_STOPS - 1 : choices->texture_detail);
+	write("render.texture_detail", text);
+	sprintf(text, "%d", choices->keep_up > 0 ? choices->keep_up : 0);
+	write("render.adaptive_fps", text);
+	percent = choices->brightness < LAUNCHER_BRIGHTNESS_MINIMUM ? 100 :
+		choices->brightness > LAUNCHER_BRIGHTNESS_MAXIMUM ? LAUNCHER_BRIGHTNESS_MAXIMUM : choices->brightness;
+	sprintf(text, "%d.%02d", percent / 100, percent % 100);
+	write("render.gamma", text);
 	write("display.vsync", choices->vsync ? "true" : "false");
 	sprintf(text, "%d", fps_values[choices->fps_stop >= 0 && choices->fps_stop < LAUNCHER_FPS_STOPS ?
 		choices->fps_stop : LAUNCHER_FPS_STOPS - 1]);
@@ -186,6 +225,17 @@ void launcher_load(struct launcher_choices *choices, launcher_read read)
 	}
 	text = read("render.visibility");
 	choices->pvs_visibility = text && !strcmp(text, "pvs");
+	text = read("render.texture_detail");
+	choices->texture_detail = text && *text ? atoi(text) : 0;
+	if (choices->texture_detail < 0 || choices->texture_detail >= LAUNCHER_TEXTURE_STOPS)
+		choices->texture_detail = 0;
+	text = read("render.adaptive_fps");
+	choices->keep_up = text && *text && atoi(text) > 0 ? atoi(text) : 0;
+	text = read("render.gamma");
+	number = text && *text ? atof(text) : 1.0;
+	best = (int)(number * 100.0 + 0.5);
+	best = ((best + LAUNCHER_BRIGHTNESS_STEP / 2) / LAUNCHER_BRIGHTNESS_STEP) * LAUNCHER_BRIGHTNESS_STEP;
+	choices->brightness = best < LAUNCHER_BRIGHTNESS_MINIMUM || best > LAUNCHER_BRIGHTNESS_MAXIMUM ? 100 : best;
 	choices->vsync = is_true(read("display.vsync"));
 	text = read("display.max_fps");
 	number = text && *text ? atof(text) : 0.0;

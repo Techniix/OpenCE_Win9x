@@ -120,6 +120,8 @@ int retro_texture_get(const D3DBaseTexture *texture, const D3DPalette *palette, 
 void retro_textures_begin_frame(unsigned long frame);
 /* whether a texture's texels are a render target's (the device knows) */
 int retro_device_is_render_target(DWORD data);
+/* render.gamma, applied once a frame (retro_gamma.c) */
+void retro_gamma_update(void);
 
 /* ---------- the device (retro_device.c) */
 

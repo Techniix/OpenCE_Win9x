@@ -20,6 +20,7 @@ and the debug keyboard that the game's console reads.
 #include "player_link.h"
 #include "xiso.h"
 #include "touch_input.h"
+#include "../game/render_policy.h"
 #include "../game/text_filter.h"
 
 #include <SDL3/SDL.h>
@@ -2318,6 +2319,13 @@ void platform_pump_events(void)
 				(event.key.scancode == SDL_SCANCODE_PAGEUP || event.key.scancode == SDL_SCANCODE_PAGEDOWN))
 			{
 				scoreboard_pages += event.key.scancode == SDL_SCANCODE_PAGEDOWN ? 1 : -1;
+			}
+			/* Ctrl+Minus and Ctrl+Equals: a step less or more detail (render_policy.c) */
+			if (event.key.down && !event.key.repeat &&
+				(input_state.keys[SDL_SCANCODE_LCTRL] || input_state.keys[SDL_SCANCODE_RCTRL]) &&
+				(event.key.scancode == SDL_SCANCODE_MINUS || event.key.scancode == SDL_SCANCODE_EQUALS))
+			{
+				halo_render_level_adjust(event.key.scancode == SDL_SCANCODE_MINUS ? 1 : -1);
 			}
 			/* F12 releases or recaptures the mouse */
 			if (event.key.down && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F12)

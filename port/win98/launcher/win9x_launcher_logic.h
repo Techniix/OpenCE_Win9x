@@ -31,7 +31,12 @@ enum
 	LAUNCHER_EXTRAS_STOPS = 4,	/* all, no shine, fewer, bare */
 	LAUNCHER_DETAIL_MINIMUM = 15,	/* object detail, in percent, in steps of 5 */
 	LAUNCHER_DETAIL_MAXIMUM = 100,
-	LAUNCHER_DETAIL_STEP = 5
+	LAUNCHER_DETAIL_STEP = 5,
+	LAUNCHER_TEXTURE_STOPS = 4,	/* full, half, quarter, eighth */
+	LAUNCHER_KEEP_UP_STOPS = 5,	/* off, 20, 25, 30, 40 */
+	LAUNCHER_BRIGHTNESS_MINIMUM = 50,
+	LAUNCHER_BRIGHTNESS_MAXIMUM = 200,
+	LAUNCHER_BRIGHTNESS_STEP = 5
 };
 
 struct launcher_choices
@@ -47,6 +52,9 @@ struct launcher_choices
 	int reverb;
 	int fast_mixing;	/* audio.resampler "linear" rather than "sinc" */
 	int sound;
+	int texture_detail;	/* render.texture_detail, 0 (full) to 3 (an eighth) */
+	int keep_up;		/* render.adaptive_fps: 0 off, else the frame rate held */
+	int brightness;		/* render.gamma, in percent, 50 to 200 (100 leaves the display alone) */
 };
 
 typedef int (*launcher_write)(const char *name, const char *value);
@@ -61,6 +69,10 @@ int launcher_suggest(unsigned long megahertz, unsigned long megabytes);
 const char *launcher_scale_name(int stop);
 const char *launcher_fps_name(int stop);
 const char *launcher_extras_name(int stop);
+const char *launcher_texture_name(int stop);
+/* the frame rate a Keep Up stop holds (0: off), and the stop nearest a rate */
+int launcher_keep_up_fps(int stop);
+int launcher_keep_up_stop(int fps);
 
 /* writes every setting the choices stand for, through write */
 void launcher_apply(const struct launcher_choices *choices, launcher_write write);
