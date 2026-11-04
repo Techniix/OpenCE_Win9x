@@ -62,7 +62,8 @@ skips opening a device; audio.channels chooses stereo or 5.1
 #include <time.h>
 #include <unistd.h>
 
-#define OUTPUT_RATE 48000
+#define MAXIMUM_OUTPUT_RATE 48000 /* what the buffers are sized for */
+#define MINIMUM_OUTPUT_RATE 8000
 #define OUTPUT_CHANNELS 2 /* the stereo mix's, and the reverb's outputs */
 #define MAXIMUM_OUTPUT_CHANNELS 6
 #define MAXIMUM_STREAM_PACKETS 64
@@ -83,6 +84,9 @@ skips opening a device; audio.channels chooses stereo or 5.1
 #else
 #define RESAMPLER_ALIGNED
 #endif
+
+/* audio.sample_rate: the rate the mixer runs and the device is opened at (read when the sound starts) */
+static unsigned long output_rate = MAXIMUM_OUTPUT_RATE;
 
 /* ---------- voices */
 
@@ -155,6 +159,8 @@ struct sdl_stream
 	unsigned long center;
 	double phase;
 	unsigned long silence;
+	/* (audio.resampler auto) set each chunk: not one of the loudest, so linear */
+	BOOL cheap;
 	/* gains and low pass coefficients the mixer is ramping from, to avoid
 	clicks */
 	float current_left, current_right, current_room;
@@ -212,15 +218,15 @@ static float flush_denormal(float value)
 	return fabsf(value) < 1.0e-20f ? 0.0f : value;
 }
 
-/* cos(2 pi f / OUTPUT_RATE) of a filter's frequency f, within what the
+/* cos(2 pi f / output_rate) of a filter's frequency f, within what the
 output rate holds */
 static float frequency_cosine(float frequency)
 {
 	if (frequency < 20.0f)
 		frequency = 20.0f;
-	if (frequency > 0.45f * OUTPUT_RATE)
-		frequency = 0.45f * OUTPUT_RATE;
-	return cosf(2.0f * 3.14159265f * frequency / OUTPUT_RATE);
+	if (frequency > 0.45f * output_rate)
+		frequency = 0.45f * output_rate;
+	return cosf(2.0f * 3.14159265f * frequency / output_rate);
 }
 
 /* the coefficient a of the one-pole low pass y = x + a (y' - x) whose gain is
@@ -644,17 +650,23 @@ images above the source's rate through, which some hear as brighter) */
 enum resampler_mode
 {
 	RESAMPLER_SINC,
-	RESAMPLER_LINEAR
+	RESAMPLER_LINEAR,
+	/* sinc for the loudest voices (audio.sinc_voices of them), linear for the rest: on a chunk of
+	the mix, the quiet voices are the ones whose resampling nobody hears, and the sinc low
+	pass is most of what a voice costs */
+	RESAMPLER_AUTO
 };
-/* audio.resampler */
+/* audio.resampler, and audio.sinc_voices (for auto) */
 static enum resampler_mode resampler_mode = RESAMPLER_SINC;
+static long sinc_voices = 6;
 
 /* audio.resampler's mode: sinc for any value but "linear" */
 static enum resampler_mode resampler_mode_read(void)
 {
 	const char *setting = config_string("audio.resampler");
 
-	return setting && !strcmp(setting, "linear") ? RESAMPLER_LINEAR : RESAMPLER_SINC;
+	return setting && !strcmp(setting, "linear") ? RESAMPLER_LINEAR :
+		setting && !strcmp(setting, "auto") ? RESAMPLER_AUTO : RESAMPLER_SINC;
 }
 
 static double bessel_i0(double x)
@@ -880,7 +892,7 @@ static void mix_voice(struct sdl_stream *stream, float *output, float *send, uns
 
 	if (stream->paused || !stream->packet_count || !stream->sample_rate)
 		return;
-	step = (double)(stream->frequency ? stream->frequency : stream->sample_rate) / OUTPUT_RATE;
+	step = (double)(stream->frequency ? stream->frequency : stream->sample_rate) / output_rate;
 	/* the low pass narrowed for a voice taking frames faster than the output
 	rate, and the frames it reaches on each side */
 	scale = step > 1.0 ? (float)(1.0 / (step < RESAMPLER_MAXIMUM_STRETCH ? step : RESAMPLER_MAXIMUM_STRETCH)) : 1.0f;
@@ -970,7 +982,7 @@ static void mix_voice(struct sdl_stream *stream, float *output, float *send, uns
 			/* a voice turned all the way down (out of earshot), and not
 			sending to the reverb, only moves on */
 		}
-		else if (resampler_mode == RESAMPLER_LINEAR)
+		else if (resampler_mode == RESAMPLER_LINEAR || (resampler_mode == RESAMPLER_AUTO && stream->cheap))
 		{
 			/* (the frame the output is at and the next, side by side
 			however the ring wraps) */
@@ -1198,7 +1210,7 @@ static float clamp_real(float value, float minimum, float maximum)
 /* whole samples */
 static unsigned long reverb_samples(float seconds)
 {
-	return (unsigned long)floorf(seconds * OUTPUT_RATE + 0.5f);
+	return (unsigned long)floorf(seconds * output_rate + 0.5f);
 }
 
 /* the sample buffer got delay samples before position, crossfaded from the
@@ -1232,16 +1244,16 @@ static void reverb_parameters_set(struct reverb_parameters *parameters, const DS
 
 	for (index = 0; index < REVERB_LINES; index++)
 	{
-		float length = floorf(reverb_line_times[index] * 0.001f * OUTPUT_RATE * scale + 0.5f);
+		float length = floorf(reverb_line_times[index] * 0.001f * output_rate * scale + 0.5f);
 		float high_feedback;
 
 		parameters->lengths[index] = (unsigned long)length;
-		parameters->feedback[index] = powf(10.0f, -3.0f * length / (decay * OUTPUT_RATE));
-		high_feedback = powf(10.0f, -3.0f * length / (high_decay * OUTPUT_RATE));
+		parameters->feedback[index] = powf(10.0f, -3.0f * length / (decay * output_rate));
+		high_feedback = powf(10.0f, -3.0f * length / (high_decay * output_rate));
 		parameters->damping[index] = lowpass_coefficient(high_feedback / parameters->feedback[index], cosine);
 		mean_length += length / REVERB_LINES;
 	}
-	mean_feedback = powf(10.0f, -3.0f * mean_length / (decay * OUTPUT_RATE));
+	mean_feedback = powf(10.0f, -3.0f * mean_length / (decay * output_rate));
 	reflections_delay = reverb_samples(clamp_real(properties->flReflectionsDelay, 0.0f, 0.3f));
 	for (index = 0; index < REVERB_TAPS; index++)
 		parameters->taps[index] = reflections_delay + reverb_samples(reverb_tap_times[index] * 0.001f);
@@ -1433,7 +1445,7 @@ static struct
 
 static void limit(float *output, unsigned long frames)
 {
-	float release = 1.0f - expf(-1.0f / (LIMITER_RELEASE_SECONDS * OUTPUT_RATE));
+	float release = 1.0f - expf(-1.0f / (LIMITER_RELEASE_SECONDS * output_rate));
 	unsigned long frame, index, channel;
 
 	if (!limiter.initialized)
@@ -1488,6 +1500,48 @@ static void limit(float *output, unsigned long frames)
 	}
 }
 
+/* audio.resampler auto: the loudest sinc_voices voices keep the sinc low pass this chunk, the rest
+are marked cheap (mix_voice). Loudness is the gain of the voice's strongest path now (a voice
+the game has turned down, or that is far away, is quiet), ties broken by the list's order. Under
+mixer_lock. */
+static void voices_rank(void)
+{
+	enum { RANKED = 64 };
+	struct sdl_stream *ranked[RANKED];
+	float loudness[RANKED];
+	struct sdl_stream *stream;
+	long count = 0, index, keep = sinc_voices < 0 ? 0 : sinc_voices > RANKED ? RANKED : sinc_voices;
+
+	for (stream = streams; stream; stream = stream->next)
+	{
+		float left = 0.0f, right = 0.0f, room, direct_lowpass, room_lowpass, level;
+
+		stream->cheap = TRUE;
+		if (!keep || stream->paused || !stream->packet_count || !stream->sample_rate)
+			continue;
+		voice_gains(stream, &left, &right, &room, &direct_lowpass, &room_lowpass);
+		level = left > right ? left : right;
+		if (room > level)
+			level = room;
+		if (count == keep && level <= loudness[count - 1])
+			continue;
+		/* (its place among the louder, the quietest of a full list dropped) */
+		index = count < keep ? count : keep - 1;
+		while (index > 0 && loudness[index - 1] < level)
+		{
+			ranked[index] = ranked[index - 1];
+			loudness[index] = loudness[index - 1];
+			index--;
+		}
+		ranked[index] = stream;
+		loudness[index] = level;
+		if (count < keep)
+			count++;
+	}
+	for (index = 0; index < count; index++)
+		ranked[index]->cheap = FALSE;
+}
+
 static void mix(float *output, unsigned long frames)
 {
 	struct sdl_stream *stream;
@@ -1498,6 +1552,8 @@ static void mix(float *output, unsigned long frames)
 	memset(output, 0, frames * output_channels * sizeof(float));
 	memset(reverb.send, 0, frames * sizeof(float));
 	pthread_mutex_lock(&mixer_lock);
+	if (resampler_mode == RESAMPLER_AUTO)
+		voices_rank();
 	for (stream = streams; stream; stream = stream->next)
 		mix_voice(stream, output, reverb.send, frames);
 	/* a new environment, once the fade to the last is over */
@@ -1526,7 +1582,7 @@ static void mix(float *output, unsigned long frames)
 		unsigned long frame;
 
 		memset(voices, 0, frames * OUTPUT_CHANNELS * sizeof(float));
-		voice_audio_mix(voices, frames);
+		voice_audio_mix_at(voices, frames, output_rate);
 		for (frame = 0; frame < frames; frame++)
 		{
 			output[frame * 6] += voices[frame * 2];
@@ -1535,7 +1591,7 @@ static void mix(float *output, unsigned long frames)
 	}
 	else
 	{
-		voice_audio_mix(output, frames);
+		voice_audio_mix_at(output, frames, output_rate);
 	}
 	limit(output, frames);
 }
@@ -1586,7 +1642,7 @@ static void *silent_clock_thread(void *parameter)
 	clock_gettime(CLOCK_MONOTONIC, &next);
 	for (;;)
 	{
-		mix(buffer, 480);
+		mix(buffer, output_rate / 100);
 		next.tv_nsec += 10000000L;
 		if (next.tv_nsec >= 1000000000L)
 		{
@@ -1634,6 +1690,16 @@ static void audio_start(void)
 	master_volume = (float)config_real("audio.volume");
 	reverb_enabled = config_boolean("audio.reverb");
 	resampler_mode = resampler_mode_read();
+	sinc_voices = config_integer("audio.sinc_voices");
+	/* audio.sample_rate: 8000 to 48000, the mixer's and the device's */
+	{
+		long rate = config_integer("audio.sample_rate");
+
+		output_rate = rate < MINIMUM_OUTPUT_RATE ? MINIMUM_OUTPUT_RATE :
+			rate > MAXIMUM_OUTPUT_RATE ? MAXIMUM_OUTPUT_RATE : (unsigned long)rate;
+		if (output_rate != MAXIMUM_OUTPUT_RATE)
+			platform_log("sound: mixing at %lu Hz (audio.sample_rate)", output_rate);
+	}
 	resampler_initialize();
 	resampler_phases_initialize();
 	reverb_initialize();
@@ -1645,7 +1711,7 @@ static void audio_start(void)
 		platform_log("sound: %s", output_channels == 6 ? "5.1 surround" : "stereo");
 		spec.format = SDL_AUDIO_F32;
 		spec.channels = (int)output_channels;
-		spec.freq = OUTPUT_RATE;
+		spec.freq = (int)output_rate;
 #ifdef HALO_ARM64_GUEST
 		/* frames per callback: on Android each callback is handed to a thread
 		that can run the guest (host_sdl.c): 512 left it too little time and
@@ -1707,7 +1773,7 @@ void dsound_sdl_output_device_check(void)
 	/* (the game's mix bins are set for the channels the sound started with;
 	SDL turns them into the new device's) */
 	spec.channels = (int)output_channels;
-	spec.freq = OUTPUT_RATE;
+	spec.freq = (int)output_rate;
 	SDL_DestroyAudioStream(audio_stream);
 	stream = SDL_OpenAudioDeviceStream(platform_audio_device(FALSE, audio_device_name), &spec, audio_callback, NULL);
 	if (!stream)

@@ -2,7 +2,9 @@
 WIN9X_LAUNCHER.C
 
 The setup window of the Windows 9x build: sliders and toggles for what a slow
-machine needs to choose, shown before the game opens. It is plain user32 (the
+machine needs to choose, shown before the game opens, with a line of help for
+the control under the pointer or the focus, a benchmark button and a banner in
+the style of the setup programs of its time. It is plain user32 (the
 classes BUTTON, STATIC, COMBOBOX and SCROLLBAR, which every Windows 95 has: the
 trackbar is comctl32's, which an early Windows 95 lacks), in ANSI.
 
@@ -33,16 +35,19 @@ The settings it writes and reads are in win9x_launcher_logic.c.
 
 enum
 {
-	WINDOW_WIDTH = 480,
-	LEFT = 14,
-	LABEL_WIDTH = 150,
-	CONTROL_LEFT = 170,
-	SLIDER_WIDTH = 200,
-	VALUE_LEFT = 376,
-	ROW_HEIGHT = 28,
+	/* the window's client area, which fits a 640 by 480 screen with its frame and caption */
+	WINDOW_WIDTH = 616,
+	BANNER_HEIGHT = 52,
+	MARGIN = 10,
+	GROUP_WIDTH = 296,
+	GROUP_PAD = 10,
+	GROUP_TITLE = 18,
+	ROW_PITCH = 24,
+	CHECK_PITCH = 20,
 
 	ID_PRESET = 100,
 	ID_DETECT,
+	ID_BENCHMARK,
 	ID_MODE,
 	ID_PLAY,
 	ID_SAVE,
@@ -51,7 +56,6 @@ enum
 	ID_SMOOTH,
 	ID_PVS,
 	ID_REVERB,
-	ID_FAST_MIXING,
 	ID_SOUND,
 	ID_NEXT_START,
 
@@ -62,14 +66,20 @@ enum
 	SLIDER_TEXTURES,
 	SLIDER_KEEP_UP,
 	SLIDER_BRIGHTNESS,
-	SLIDER_COUNT
+	SLIDER_SOUND,
+	SLIDER_COUNT,
+
+	MAXIMUM_HINTS = 40,
+	HINT_TIMER = 1,
+	BENCHMARK_SECONDS = 30
 };
 
 enum
 {
 	RESULT_PLAY = 1,
 	RESULT_SAVE,
-	RESULT_QUIT
+	RESULT_QUIT,
+	RESULT_BENCHMARK
 };
 
 struct slider
@@ -79,17 +89,35 @@ struct slider
 	int minimum, maximum, step;
 };
 
+/* the line of help for a control: shown while the pointer is over its row, or it has the focus */
+struct hint
+{
+	HWND control;
+	RECT area;
+	const char *text;
+};
+
 /* ---------- private data */
 
 static const char window_class[] = "OpenCEWin9xSetup";
 static struct slider sliders[SLIDER_COUNT];
-static HWND window, preset_combo, mode_combo, hardware_text, notice_text;
+static HWND window, preset_combo, mode_combo, hardware_text, hint_bar;
 static HWND toggles[ID_NEXT_START - ID_VSYNC + 1];
-static HFONT font;
+static HFONT font, title_font, subtitle_font;
 static int result;
 /* the choices as the window left them (read before its controls went) */
 static struct launcher_choices final_choices;
-static int final_again;
+static int final_again, final_preset;
+/* the window's own notice (why it came up unasked), drawn in the banner */
+static char banner_notice[200];
+static struct hint hints[MAXIMUM_HINTS];
+static int hint_count;
+static const char *hint_shown;
+static int recommended_preset = -1;
+/* a benchmark run under way: the preset it ran at (the window's advice is relative to it) */
+static int benchmark_preset;
+
+static const char default_hint[] = "Move the pointer over a setting, or tab to it, to see what it does.";
 
 /* ---------- private code: the settings */
 
@@ -193,11 +221,13 @@ static const char *slider_text(int which, int position, char *text)
 	case SLIDER_KEEP_UP:
 		if (!position)
 			return "Off";
-		sprintf(text, "%d frames a second", launcher_keep_up_fps(position));
+		sprintf(text, "%d fps", launcher_keep_up_fps(position));
 		return text;
 	case SLIDER_BRIGHTNESS:
 		sprintf(text, "%d%%", position * LAUNCHER_BRIGHTNESS_STEP);
 		return text;
+	case SLIDER_SOUND:
+		return launcher_sound_name(position);
 	default:
 		return launcher_fps_name(position);
 	}
@@ -217,7 +247,7 @@ static void slider_set(int which, int position)
 {
 	struct slider *slider = &sliders[which];
 	SCROLLINFO info;
-	char text[16];
+	char text[24];
 
 	if (position < slider->minimum)
 		position = slider->minimum;
@@ -230,6 +260,16 @@ static void slider_set(int which, int position)
 	SetWindowTextA(slider->value, slider_text(which, position, text));
 }
 
+static int toggle_get(int id)
+{
+	return (int)SendMessageA(toggles[id - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
+}
+
+static void toggle_set(int id, int on)
+{
+	SendMessageA(toggles[id - ID_VSYNC], BM_SETCHECK, on != 0, 0);
+}
+
 static void show_choices(const struct launcher_choices *choices)
 {
 	slider_set(SLIDER_SCALE, choices->scale_stop);
@@ -239,13 +279,13 @@ static void show_choices(const struct launcher_choices *choices)
 	slider_set(SLIDER_TEXTURES, choices->texture_detail);
 	slider_set(SLIDER_KEEP_UP, launcher_keep_up_stop(choices->keep_up));
 	slider_set(SLIDER_BRIGHTNESS, choices->brightness / LAUNCHER_BRIGHTNESS_STEP);
+	slider_set(SLIDER_SOUND, choices->sound_quality);
 	SendMessageA(mode_combo, CB_SETCURSEL, (WPARAM)choices->display_mode, 0);
-	SendMessageA(toggles[ID_VSYNC - ID_VSYNC], BM_SETCHECK, choices->vsync, 0);
-	SendMessageA(toggles[ID_SMOOTH - ID_VSYNC], BM_SETCHECK, choices->smooth_motion, 0);
-	SendMessageA(toggles[ID_PVS - ID_VSYNC], BM_SETCHECK, choices->pvs_visibility, 0);
-	SendMessageA(toggles[ID_REVERB - ID_VSYNC], BM_SETCHECK, choices->reverb, 0);
-	SendMessageA(toggles[ID_FAST_MIXING - ID_VSYNC], BM_SETCHECK, choices->fast_mixing, 0);
-	SendMessageA(toggles[ID_SOUND - ID_VSYNC], BM_SETCHECK, choices->sound, 0);
+	toggle_set(ID_VSYNC, choices->vsync);
+	toggle_set(ID_SMOOTH, choices->smooth_motion);
+	toggle_set(ID_PVS, choices->pvs_visibility);
+	toggle_set(ID_REVERB, choices->reverb);
+	toggle_set(ID_SOUND, choices->sound);
 }
 
 static void collect_choices(struct launcher_choices *choices)
@@ -259,12 +299,12 @@ static void collect_choices(struct launcher_choices *choices)
 	choices->texture_detail = slider_get(SLIDER_TEXTURES);
 	choices->keep_up = launcher_keep_up_fps(slider_get(SLIDER_KEEP_UP));
 	choices->brightness = slider_get(SLIDER_BRIGHTNESS) * LAUNCHER_BRIGHTNESS_STEP;
-	choices->vsync = (int)SendMessageA(toggles[ID_VSYNC - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
-	choices->smooth_motion = (int)SendMessageA(toggles[ID_SMOOTH - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
-	choices->pvs_visibility = (int)SendMessageA(toggles[ID_PVS - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
-	choices->reverb = (int)SendMessageA(toggles[ID_REVERB - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
-	choices->fast_mixing = (int)SendMessageA(toggles[ID_FAST_MIXING - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
-	choices->sound = (int)SendMessageA(toggles[ID_SOUND - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
+	choices->sound_quality = slider_get(SLIDER_SOUND);
+	choices->vsync = toggle_get(ID_VSYNC);
+	choices->smooth_motion = toggle_get(ID_SMOOTH);
+	choices->pvs_visibility = toggle_get(ID_PVS);
+	choices->reverb = toggle_get(ID_REVERB);
+	choices->sound = toggle_get(ID_SOUND);
 }
 
 static HWND make(const char *class_name, const char *text, DWORD style, int x, int y, int width, int height,
@@ -278,23 +318,73 @@ static HWND make(const char *class_name, const char *text, DWORD style, int x, i
 	return control;
 }
 
-static void make_slider(int which, const char *label, int minimum, int maximum, int step, int y)
+/* what the pointer over a rectangle (a control's row), or the focus on control, shows in the help line */
+static void add_hint(HWND control, int x, int y, int width, int height, const char *text)
+{
+	struct hint *hint;
+
+	if (hint_count >= MAXIMUM_HINTS)
+		return;
+	hint = &hints[hint_count++];
+	hint->control = control;
+	hint->area.left = x;
+	hint->area.top = y;
+	hint->area.right = x + width;
+	hint->area.bottom = y + height;
+	hint->text = text;
+}
+
+/* a row: its label, the slider (the scroll bar: the trackbar is comctl32's) and its value's text */
+static void make_slider(int which, const char *label, int minimum, int maximum, int x, int y,
+	int label_width, int bar_width, int value_width, const char *hint)
 {
 	struct slider *slider = &sliders[which];
 	SCROLLINFO info;
 
-	make("STATIC", label, SS_LEFT, LEFT, y + 3, LABEL_WIDTH, 18, 0);
-	slider->bar = make("SCROLLBAR", "", SBS_HORZ | WS_TABSTOP, CONTROL_LEFT, y + 2, SLIDER_WIDTH, 20, 0);
-	slider->value = make("STATIC", "", SS_LEFT, VALUE_LEFT, y + 3, WINDOW_WIDTH - VALUE_LEFT - 8, 18, 0);
+	make("STATIC", label, SS_LEFT, x, y + 3, label_width, 16, 0);
+	slider->bar = make("SCROLLBAR", "", SBS_HORZ | WS_TABSTOP, x + label_width + 2, y + 1, bar_width, 18, 0);
+	slider->value = make("STATIC", "", SS_LEFT, x + label_width + bar_width + 6, y + 3, value_width, 16, 0);
 	slider->minimum = minimum;
 	slider->maximum = maximum;
-	slider->step = step;
+	slider->step = 1;
 	info.cbSize = sizeof(info);
 	info.fMask = SIF_RANGE | SIF_PAGE;
 	info.nMin = minimum;
 	info.nMax = maximum;
 	info.nPage = 0;
 	SetScrollInfo(slider->bar, SB_CTL, &info, TRUE);
+	add_hint(slider->bar, x - 4, y, label_width + bar_width + value_width + 10, ROW_PITCH - 2, hint);
+}
+
+static void make_toggle(int id, const char *text, int x, int y, int width, const char *hint)
+{
+	HWND control = make("BUTTON", text, BS_AUTOCHECKBOX | WS_TABSTOP, x, y, width, 18, id);
+
+	toggles[id - ID_VSYNC] = control;
+	add_hint(control, x - 2, y - 1, width + 4, CHECK_PITCH, hint);
+}
+
+static void make_group(const char *title, int x, int y, int width, int height)
+{
+	make("BUTTON", title, BS_GROUPBOX, x, y, width, height, 0);
+}
+
+/* the presets' list, the machine's suggestion marked once Detect has been (or the first run has) found it */
+static void presets_list(int selected)
+{
+	int index;
+	char text[40];
+
+	SendMessageA(preset_combo, CB_RESETCONTENT, 0, 0);
+	for (index = 0; index < LAUNCHER_PRESET_COUNT; index++)
+	{
+		if (index == recommended_preset)
+			sprintf(text, "%s (suggested)", launcher_preset_name(index));
+		else
+			strcpy(text, launcher_preset_name(index));
+		SendMessageA(preset_combo, CB_ADDSTRING, 0, (LPARAM)text);
+	}
+	SendMessageA(preset_combo, CB_SETCURSEL, (WPARAM)selected, 0);
 }
 
 static void preset_chosen(void)
@@ -316,7 +406,7 @@ static void detect(void)
 	unsigned long speed = measure_megahertz();
 	unsigned long memory = megabytes();
 	int preset = launcher_suggest(speed, memory);
-	char text[160];
+	char text[200];
 
 	/* (the window checks once as it opens: a click after that says it checked again) */
 	if (speed)
@@ -327,7 +417,8 @@ static void detect(void)
 			checked ? "Checked again. " : "", memory, launcher_preset_name(preset));
 	checked = 1;
 	SetWindowTextA(hardware_text, text);
-	SendMessageA(preset_combo, CB_SETCURSEL, (WPARAM)preset, 0);
+	recommended_preset = preset;
+	presets_list(preset);
 	preset_chosen();
 }
 
@@ -364,14 +455,95 @@ static void slide(HWND bar, WPARAM wparam)
 	}
 }
 
+/* the help line: what is under the pointer, else what has the focus, else how to find out */
+static void hint_update(void)
+{
+	POINT point;
+	const char *text = default_hint;
+	HWND focus = GetFocus();
+	int index;
+	int found = 0;
+
+	GetCursorPos(&point);
+	ScreenToClient(window, &point);
+	for (index = 0; index < hint_count && !found; index++)
+	{
+		if (PtInRect(&hints[index].area, point))
+		{
+			text = hints[index].text;
+			found = 1;
+		}
+	}
+	for (index = 0; index < hint_count && !found; index++)
+	{
+		if (hints[index].control == focus)
+		{
+			text = hints[index].text;
+			found = 1;
+		}
+	}
+	if (text != hint_shown)
+	{
+		hint_shown = text;
+		SetWindowTextA(hint_bar, text);
+	}
+}
+
+/* the banner: a blue band across the top, as the setup programs of the time had, with the game's name and either
+the window's subtitle or, in yellow, why it came up unasked */
+static void banner_paint(HDC dc)
+{
+	RECT band;
+	int step, steps = WINDOW_WIDTH / 4;
+	HFONT old;
+
+	for (step = 0; step < steps; step++)
+	{
+		HBRUSH brush = CreateSolidBrush(RGB(0, 24 + step * 40 / steps, 96 + step * 70 / steps));
+
+		band.left = step * 4;
+		band.right = step == steps - 1 ? WINDOW_WIDTH : band.left + 4;
+		band.top = 0;
+		band.bottom = BANNER_HEIGHT;
+		FillRect(dc, &band, brush);
+		DeleteObject(brush);
+	}
+	/* (a light edge and a dark one under it: the raised look) */
+	band.left = 0;
+	band.right = WINDOW_WIDTH;
+	band.top = BANNER_HEIGHT;
+	band.bottom = BANNER_HEIGHT + 1;
+	FillRect(dc, &band, GetSysColorBrush(COLOR_BTNSHADOW));
+	SetBkMode(dc, TRANSPARENT);
+	old = (HFONT)SelectObject(dc, title_font ? title_font : font);
+	SetTextColor(dc, RGB(0, 0, 40));
+	TextOutA(dc, 15, 5, "HALO", 4);
+	SetTextColor(dc, RGB(225, 238, 255));
+	TextOutA(dc, 13, 3, "HALO", 4);
+	SelectObject(dc, subtitle_font ? subtitle_font : font);
+	if (banner_notice[0])
+	{
+		SetTextColor(dc, RGB(255, 235, 120));
+		TextOutA(dc, 14, 34, banner_notice, (int)strlen(banner_notice));
+	}
+	else
+	{
+		SetTextColor(dc, RGB(170, 205, 255));
+		TextOutA(dc, 14, 34, "Combat Evolved  -  Setup", 24);
+	}
+	SelectObject(dc, old);
+}
+
 static void finish(int how)
 {
 	if (how != RESULT_QUIT)
 	{
 		collect_choices(&final_choices);
-		final_again = (int)SendMessageA(toggles[ID_NEXT_START - ID_VSYNC], BM_GETCHECK, 0, 0) == BST_CHECKED;
+		final_again = toggle_get(ID_NEXT_START);
+		final_preset = (int)SendMessageA(preset_combo, CB_GETCURSEL, 0, 0);
 	}
 	result = how;
+	KillTimer(window, HINT_TIMER);
 	DestroyWindow(window);
 }
 
@@ -379,6 +551,19 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 {
 	switch (message)
 	{
+	case WM_PAINT:
+	{
+		PAINTSTRUCT paint;
+		HDC dc = BeginPaint(hwnd, &paint);
+
+		banner_paint(dc);
+		EndPaint(hwnd, &paint);
+		return 0;
+	}
+	case WM_TIMER:
+		if (wparam == HINT_TIMER)
+			hint_update();
+		return 0;
 	case WM_HSCROLL:
 		slide((HWND)lparam, wparam);
 		return 0;
@@ -391,6 +576,9 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 			return 0;
 		case ID_DETECT:
 			detect();
+			return 0;
+		case ID_BENCHMARK:
+			finish(RESULT_BENCHMARK);
 			return 0;
 		case ID_PLAY:
 		case IDOK:
@@ -415,17 +603,17 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPAR
 	return DefWindowProcA(hwnd, message, wparam, lparam);
 }
 
-/* shows the window; RESULT_PLAY, RESULT_SAVE or RESULT_QUIT. notice, if any,
-says why it came up unasked. On RESULT_PLAY and RESULT_SAVE, the choices
-are in choices, and whether the window is to come again next time. */
-static int run_window(const char *notice, struct launcher_choices *choices, int *again)
+/* shows the window; RESULT_PLAY, RESULT_SAVE, RESULT_BENCHMARK or RESULT_QUIT. notice, if any,
+says why it came up unasked. Except on RESULT_QUIT, the choices are in choices, and whether the window is
+to come again next time, and the preset the list showed. */
+static int run_window(const char *notice, struct launcher_choices *choices, int *again, int *preset_out)
 {
 	WNDCLASSA wc;
 	MSG message;
 	RECT rect;
-	int y = 10, index, screen_x, screen_y, height = 470;
-	static const char *const toggle_texts[] = { "V-Sync", "Smooth motion", "Stored room sets (PVS)",
-		"Room reverb", "Fast sound mixing", "Sound", "Show this window at the next start" };
+	int y, left_x = MARGIN, right_x = MARGIN + GROUP_WIDTH + 4, inner, group_y, group_height, row;
+	int screen_x, screen_y, client_height;
+	enum { LABEL = 84, BAR = 104, VALUE = 84 };
 
 	memset(&wc, 0, sizeof(wc));
 	wc.lpfnWndProc = window_proc;
@@ -435,10 +623,23 @@ static int run_window(const char *notice, struct launcher_choices *choices, int 
 	wc.lpszClassName = window_class;
 	RegisterClassA(&wc);
 	font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+	title_font = CreateFontA(-30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS,
+		CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
+	subtitle_font = CreateFontA(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS,
+		CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
+	strncpy(banner_notice, notice ? notice : "", sizeof(banner_notice) - 1);
+	hint_count = 0;
+	hint_shown = NULL;
+	recommended_preset = -1;
+
+	/* the window's height, from its rows: the banner, the preset line and its text, two groups side by side,
+	the sound's, the help line and the buttons */
+	group_height = GROUP_TITLE + 4 * ROW_PITCH + 2 * CHECK_PITCH + 8;
+	client_height = BANNER_HEIGHT + 6 + 28 + 30 + group_height + 6 + (GROUP_TITLE + ROW_PITCH + 8) + 6 + 30 + 6 + 26 + 8;
 	rect.left = 0;
 	rect.top = 0;
 	rect.right = WINDOW_WIDTH;
-	rect.bottom = height;
+	rect.bottom = client_height;
 	AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU, FALSE);
 	screen_x = (GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2;
 	screen_y = (GetSystemMetrics(SM_CYSCREEN) - (rect.bottom - rect.top)) / 2;
@@ -450,75 +651,110 @@ static int run_window(const char *notice, struct launcher_choices *choices, int 
 		/* (no window: the game goes on with its settings) */
 		launcher_load(choices, read_setting);
 		*again = config_boolean("launcher.always");
+		*preset_out = LAUNCHER_PRESET_BALANCED;
 		return RESULT_PLAY;
 	}
 
-	if (notice && *notice)
-	{
-		notice_text = make("STATIC", notice, SS_LEFT, LEFT, y, WINDOW_WIDTH - 2 * LEFT, 30, 0);
-		y += 34;
-	}
-	make("STATIC", "Preset:", SS_LEFT, LEFT, y + 3, LABEL_WIDTH, 18, 0);
-	preset_combo = make("COMBOBOX", "", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, CONTROL_LEFT, y, 120, 120,
+	/* the preset line: the list, Detect and Benchmark, and what Detect found */
+	y = BANNER_HEIGHT + 6;
+	make("STATIC", "Preset:", SS_LEFT, MARGIN, y + 4, 50, 16, 0);
+	preset_combo = make("COMBOBOX", "", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, MARGIN + 52, y, 170, 120,
 		ID_PRESET);
-	for (index = 0; index < LAUNCHER_PRESET_COUNT; index++)
-		SendMessageA(preset_combo, CB_ADDSTRING, 0, (LPARAM)launcher_preset_name(index));
-	make("BUTTON", "Detect this PC", BS_PUSHBUTTON | WS_TABSTOP, 300, y - 1, 120, 24, ID_DETECT);
+	presets_list(LAUNCHER_PRESET_BALANCED);
+	{
+		HWND detect_button = make("BUTTON", "Detect this PC", BS_PUSHBUTTON | WS_TABSTOP, MARGIN + 232, y - 1, 110, 24,
+			ID_DETECT);
+		HWND benchmark_button = make("BUTTON", "Benchmark...", BS_PUSHBUTTON | WS_TABSTOP, MARGIN + 350, y - 1, 110, 24,
+			ID_BENCHMARK);
+
+		add_hint(preset_combo, MARGIN, y - 2, 222, 26,
+			"A preset sets every control below at once: Fastest for a Pentium II class PC and a 1998 graphics card, Best for the game's own settings.");
+		add_hint(detect_button, MARGIN + 230, y - 2, 114, 26,
+			"Looks at this PC's processor speed and memory, and suggests a preset. The graphics card is not tested.");
+		add_hint(benchmark_button, MARGIN + 348, y - 2, 114, 26,
+			"Plays the main menu for 30 seconds with these settings, then says how fast it ran and which preset suits this PC.");
+	}
+	y += 28;
+	hardware_text = make("STATIC", "", SS_LEFT, MARGIN, y, WINDOW_WIDTH - 2 * MARGIN, 28, 0);
 	y += 30;
-	hardware_text = make("STATIC", "", SS_LEFT, LEFT, y, WINDOW_WIDTH - 2 * LEFT, 30, 0);
-	y += 36;
-	make("STATIC", "Display:", SS_LEFT, LEFT, y + 3, LABEL_WIDTH, 18, 0);
-	mode_combo = make("COMBOBOX", "", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, CONTROL_LEFT, y, 150, 100, ID_MODE);
+
+	/* the picture's group, at the left */
+	group_y = y;
+	make_group("Picture", left_x, group_y, GROUP_WIDTH, group_height);
+	inner = left_x + GROUP_PAD;
+	row = group_y + GROUP_TITLE;
+	make("STATIC", "Display:", SS_LEFT, inner, row + 4, LABEL, 16, 0);
+	mode_combo = make("COMBOBOX", "", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, inner + LABEL + 2, row, 150, 100,
+		ID_MODE);
 	SendMessageA(mode_combo, CB_ADDSTRING, 0, (LPARAM)"Fullscreen");
 	SendMessageA(mode_combo, CB_ADDSTRING, 0, (LPARAM)"Borderless window");
 	SendMessageA(mode_combo, CB_ADDSTRING, 0, (LPARAM)"Window");
-	y += ROW_HEIGHT + 4;
-	make_slider(SLIDER_SCALE, "Picture size:", 0, LAUNCHER_SCALE_STOPS - 1, 1, y);
-	y += ROW_HEIGHT;
-	make_slider(SLIDER_DETAIL, "Object detail:", LAUNCHER_DETAIL_MINIMUM / LAUNCHER_DETAIL_STEP,
-		LAUNCHER_DETAIL_MAXIMUM / LAUNCHER_DETAIL_STEP, 1, y);
-	y += ROW_HEIGHT;
-	make_slider(SLIDER_EXTRAS, "Extras drawn:", 0, LAUNCHER_EXTRAS_STOPS - 1, 1, y);
-	y += ROW_HEIGHT;
-	make_slider(SLIDER_FPS, "Frame rate limit:", 0, LAUNCHER_FPS_STOPS - 1, 1, y);
-	y += ROW_HEIGHT;
-	make_slider(SLIDER_TEXTURES, "Texture detail:", 0, LAUNCHER_TEXTURE_STOPS - 1, 1, y);
-	y += ROW_HEIGHT;
-	make_slider(SLIDER_KEEP_UP, "Keep up (auto detail):", 0, LAUNCHER_KEEP_UP_STOPS - 1, 1, y);
-	y += ROW_HEIGHT;
+	add_hint(mode_combo, inner - 4, row - 1, LABEL + BAR + VALUE + 10, ROW_PITCH - 2,
+		"Fullscreen, a window with no border, or an ordinary window. Fullscreen is the fastest on most cards.");
+	row += ROW_PITCH;
+	make_slider(SLIDER_SCALE, "Picture size:", 0, LAUNCHER_SCALE_STOPS - 1, inner, row, LABEL, BAR, VALUE,
+		"The size of the 3D picture. Native is the window's own; Original is the Xbox's 480 lines; smaller sizes draw fewer pixels and stretch them: the biggest speed-up on a slow card.");
+	row += ROW_PITCH;
+	make_slider(SLIDER_FPS, "Frame limit:", 0, LAUNCHER_FPS_STOPS - 1, inner, row, LABEL, BAR, VALUE,
+		"The most frames a second shown. 30 is the game's own rate: more are drawn between its ticks, which a slow PC has no time for.");
+	row += ROW_PITCH;
 	make_slider(SLIDER_BRIGHTNESS, "Brightness:", LAUNCHER_BRIGHTNESS_MINIMUM / LAUNCHER_BRIGHTNESS_STEP,
-		LAUNCHER_BRIGHTNESS_MAXIMUM / LAUNCHER_BRIGHTNESS_STEP, 1, y);
-	y += ROW_HEIGHT + 6;
-	/* (the short toggles two to a row, to keep the window short for a 640 by 480 screen) */
-	for (index = 0; index < ID_NEXT_START - ID_VSYNC + 1; index++)
-	{
-		int last = index == ID_NEXT_START - ID_VSYNC;
-		int column = last ? 0 : index % 2;
+		LAUNCHER_BRIGHTNESS_MAXIMUM / LAUNCHER_BRIGHTNESS_STEP, inner, row, LABEL, BAR, VALUE,
+		"The display's gamma, for a monitor darker than the Xbox's television. 100% leaves the display alone.");
+	row += ROW_PITCH;
+	make_toggle(ID_VSYNC, "V-Sync", inner, row, 120,
+		"Waits for the display's refresh before showing a frame: no tearing, and a lower rate when the PC is slow.");
+	row += CHECK_PITCH;
+	make_toggle(ID_SMOOTH, "Smooth motion", inner, row, 140,
+		"Draws frames between the game's 30 ticks a second, for the 60 a second a display shows. It costs a little each.");
 
-		toggles[index] = make("BUTTON", toggle_texts[index], BS_AUTOCHECKBOX | WS_TABSTOP,
-			LEFT + column * (WINDOW_WIDTH - 2 * LEFT) / 2, y,
-			last ? WINDOW_WIDTH - 2 * LEFT : (WINDOW_WIDTH - 2 * LEFT) / 2 - 4, 20, ID_VSYNC + index);
-		if (last || column)
-			y += 22;
-	}
-	y += 10;
-	make("BUTTON", "Play", BS_DEFPUSHBUTTON | WS_TABSTOP, LEFT, y, 100, 28, ID_PLAY);
-	make("BUTTON", "Save and exit", BS_PUSHBUTTON | WS_TABSTOP, LEFT + 110, y, 110, 28, ID_SAVE);
-	make("BUTTON", "Quit", BS_PUSHBUTTON | WS_TABSTOP, WINDOW_WIDTH - LEFT - 80, y, 80, 28, ID_QUIT);
+	/* the detail's group, at the right */
+	make_group("Detail", right_x, group_y, GROUP_WIDTH, group_height);
+	inner = right_x + GROUP_PAD;
+	row = group_y + GROUP_TITLE;
+	make_slider(SLIDER_DETAIL, "Object detail:", LAUNCHER_DETAIL_MINIMUM / LAUNCHER_DETAIL_STEP,
+		LAUNCHER_DETAIL_MAXIMUM / LAUNCHER_DETAIL_STEP, inner, row, LABEL, BAR, VALUE,
+		"How soon objects use coarser models as they get farther. Lower: coarser sooner, and small far ones vanish.");
+	row += ROW_PITCH;
+	make_slider(SLIDER_EXTRAS, "Extras drawn:", 0, LAUNCHER_EXTRAS_STOPS - 1, inner, row, LABEL, BAR, VALUE,
+		"Leaves out passes that only add to the picture: shine and reflections, then shadows and decals, then fog.");
+	row += ROW_PITCH;
+	make_slider(SLIDER_TEXTURES, "Textures:", 0, LAUNCHER_TEXTURE_STOPS - 1, inner, row, LABEL, BAR, VALUE,
+		"The world's textures made smaller: half, a quarter or an eighth of their area in memory. Takes effect with the next map.");
+	row += ROW_PITCH;
+	make_slider(SLIDER_KEEP_UP, "Keep up:", 0, LAUNCHER_KEEP_UP_STOPS - 1, inner, row, LABEL, BAR, VALUE,
+		"Lowers the detail by itself, a level at a time, to hold this frame rate, and raises it when there is room. In the game, Ctrl+Minus and Ctrl+Equals do it by hand.");
+	row += ROW_PITCH;
+	make_toggle(ID_PVS, "Stored room sets (PVS)", inner, row, 200,
+		"Draws the rooms the map's own table says may be seen, a lighter search than the doors': it draws more, for less work.");
 
-	/* (the window's height was for the most it holds) */
-	rect.left = 0;
-	rect.top = 0;
-	rect.right = WINDOW_WIDTH;
-	rect.bottom = y + 28 + 12;
-	AdjustWindowRect(&rect, WS_CAPTION | WS_SYSMENU, FALSE);
-	SetWindowPos(window, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER);
+	/* the sound's group, across */
+	y = group_y + group_height + 6;
+	make_group("Sound", MARGIN, y, WINDOW_WIDTH - 2 * MARGIN, GROUP_TITLE + ROW_PITCH + 8);
+	row = y + GROUP_TITLE;
+	make_slider(SLIDER_SOUND, "Quality:", 0, LAUNCHER_SOUND_STOPS - 1, MARGIN + GROUP_PAD, row, 56, 130, 100,
+		"The rate the sound is mixed at, and how it is converted: lower takes less of the processor and loses the highest sounds. Next start.");
+	make_toggle(ID_SOUND, "Sound", right_x + GROUP_PAD, row + 2, 100,
+		"Sound on or off. Off opens no audio device at all.");
+	make_toggle(ID_REVERB, "Room reverb", right_x + GROUP_PAD + 110, row + 2, 140,
+		"Sounds echo as the place does: a corridor, a cave, a hall. Costs a good share of the mix.");
+	y += GROUP_TITLE + ROW_PITCH + 8 + 6;
+
+	/* the help line, and the buttons */
+	hint_bar = make("STATIC", default_hint, SS_LEFT | SS_SUNKEN, MARGIN, y, WINDOW_WIDTH - 2 * MARGIN, 30, 0);
+	y += 30 + 6;
+	make_toggle(ID_NEXT_START, "Show this window at the next start", MARGIN, y + 4, 250,
+		"Brings this window up every time the game starts. Holding Shift as it starts, or SETUP.BAT, shows it once.");
+	make("BUTTON", "Play", BS_DEFPUSHBUTTON | WS_TABSTOP, WINDOW_WIDTH - MARGIN - 262, y, 80, 26, ID_PLAY);
+	make("BUTTON", "Save and exit", BS_PUSHBUTTON | WS_TABSTOP, WINDOW_WIDTH - MARGIN - 176, y, 100, 26, ID_SAVE);
+	make("BUTTON", "Quit", BS_PUSHBUTTON | WS_TABSTOP, WINDOW_WIDTH - MARGIN - 70, y, 70, 26, ID_QUIT);
 
 	launcher_load(choices, read_setting);
 	show_choices(choices);
-	SendMessageA(toggles[ID_NEXT_START - ID_VSYNC], BM_SETCHECK, config_boolean("launcher.always"), 0);
+	toggle_set(ID_NEXT_START, config_boolean("launcher.always"));
 	if (!config_boolean("launcher.configured"))
 		detect();
+	SetTimer(window, HINT_TIMER, 150, NULL);
 	SetForegroundWindow(window);
 
 	while (GetMessageA(&message, NULL, 0, 0) > 0)
@@ -530,22 +766,55 @@ static int run_window(const char *notice, struct launcher_choices *choices, int 
 		}
 	}
 	UnregisterClassA(window_class, wc.hInstance);
+	DeleteObject(title_font);
+	DeleteObject(subtitle_font);
 	*choices = final_choices;
 	*again = final_again;
-	return result ? result : RESULT_QUIT;
+	*preset_out = final_preset;
+	return result;
+}
+
+/* ---------- the benchmark */
+
+/* the frame rate of the last report of debug.frame_budget (port/linux/game/frame_budget.c) */
+double halo_budget_result(void);
+
+/* as the benchmark's run ends with the program: its settings back, and what it measured said */
+static void benchmark_end(void)
+{
+	char text[300], message[420];
+	double rate = halo_budget_result();
+
+	launcher_advice(benchmark_preset, rate, text, sizeof(text));
+	config_write("debug.exit_after", "0.0");
+	config_write("debug.frame_budget", "0");
+	config_write_boolean("launcher.benchmark", 0);
+	config_write_boolean("launcher.show_next_start", 1);
+	sprintf(message, "%s\n\nThe main menu's scene is lighter than a game's: a map in play will run slower. The setup window opens at the next start.",
+		text);
+	MessageBoxA(NULL, message, "Halo: Combat Evolved - Benchmark", MB_OK | MB_ICONINFORMATION);
+}
+
+/* a benchmark that did not end (a crash): its settings are taken back now, or the game would quit after 30 seconds every time */
+static int benchmark_undo(void)
+{
+	if (!config_boolean("launcher.benchmark"))
+		return 0;
+	config_write("debug.exit_after", "0.0");
+	config_write("debug.frame_budget", "0");
+	config_write_boolean("launcher.benchmark", 0);
+	return 1;
 }
 
 /* ---------- public code */
 
-/* Called before the game starts, with its command line. 0 to go on to the game, else the program is to
-exit. Arguments the window uses (--setup, --no-setup) are taken out. */
 int win9x_launcher_run(int *argc, char **argv)
 {
 	int index, out = 1, force = 0, skip = 0, ran_before_unfinished = 0;
 	char notice[200];
 	char flag[MAX_PATH];
 	struct launcher_choices choices;
-	int again = 0, how;
+	int again = 0, how, preset = 0, undone;
 	DWORD attributes;
 
 	for (index = 1; index < *argc; index++)
@@ -563,6 +832,8 @@ int win9x_launcher_run(int *argc, char **argv)
 	}
 	argv[out] = NULL;
 	*argc = out;
+	/* (a benchmark that did not end has left its settings: taken back first, with the window to follow) */
+	undone = benchmark_undo();
 	if (skip || getenv("HALO_NO_LAUNCHER") || config_server_mode_enabled())
 		return 0;
 
@@ -574,7 +845,9 @@ int win9x_launcher_run(int *argc, char **argv)
 		ran_before_unfinished = 1;
 		strcpy(notice, "Halo did not close normally last time. If a setting is the cause, change it here.");
 	}
-	if (!force && !ran_before_unfinished && !config_boolean("launcher.always") &&
+	if (undone)
+		strcpy(notice, "The last benchmark did not end; its settings are back to normal.");
+	if (!force && !ran_before_unfinished && !undone && !config_boolean("launcher.always") &&
 		!config_boolean("launcher.show_next_start") && config_boolean("launcher.configured") &&
 		!(GetKeyState(VK_SHIFT) & 0x8000))
 	{
@@ -583,7 +856,7 @@ int win9x_launcher_run(int *argc, char **argv)
 		return 0;
 	}
 
-	how = run_window(notice, &choices, &again);
+	how = run_window(notice, &choices, &again, &preset);
 	if (how == RESULT_QUIT)
 	{
 		flag_remove();
@@ -597,6 +870,20 @@ int win9x_launcher_run(int *argc, char **argv)
 	{
 		flag_remove();
 		return 1;
+	}
+	if (how == RESULT_BENCHMARK)
+	{
+		/* the main menu for BENCHMARK_SECONDS, a report every 5 seconds, then the verdict as the program ends
+		(benchmark_end puts the settings back; launcher.benchmark has them taken back at the next start if
+		it never gets to) */
+		char seconds[16];
+
+		benchmark_preset = preset;
+		sprintf(seconds, "%d.0", BENCHMARK_SECONDS);
+		config_write_boolean("launcher.benchmark", 1);
+		write_setting("debug.exit_after", seconds);
+		write_setting("debug.frame_budget", "5");
+		atexit(benchmark_end);
 	}
 	flag_make();
 	atexit(flag_remove);

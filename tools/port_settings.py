@@ -388,8 +388,16 @@ _processing = {"audio.reverb"}
 SCREENS["audio_settings/sound_processing"] = {
     "screen": "sound_processing_settings_screen", "header": _audio["header"], "spacing": 30,
     "rows": [row for row in _audio["rows"] if row[1] in _processing] + [
-        ("RESAMPLER:", "audio.resampler", [("SINC", "sinc"), ("LINEAR", "linear")],
-         "How sounds are converted to the output's rate:\nsinc is clean; linear is brighter, with aliasing.",
+        ("RESAMPLER:", "audio.resampler", [("SINC", "sinc"), ("LINEAR", "linear"), ("AUTO", "auto")],
+         "How sounds are converted to the output's rate:\nsinc is clean; linear is brighter, with aliasing;\nauto: sinc for the loudest voices only.",
+         None),
+        ("SINC VOICES:", "audio.sinc_voices",
+         [("2", "2"), ("4", "4"), ("6", "6"), ("8", "8"), ("12", "12"), ("24", "24")],
+         "With auto: how many of the loudest voices keep the\nclean conversion; the rest take the cheaper one.",
+         None),
+        ("SAMPLE RATE:", "audio.sample_rate",
+         [("11 KHZ", "11025"), ("22 KHZ", "22050"), ("32 KHZ", "32000"), ("44 KHZ", "44100"), ("48 KHZ", "48000")],
+         "The rate the sound is mixed at: lower takes less of\nthe processor and loses high sounds. Next start.",
          None),
     ],
 }

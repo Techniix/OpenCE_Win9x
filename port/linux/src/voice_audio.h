@@ -40,5 +40,7 @@ void voice_audio_set_volume(float volume);
 /* (dsound_sdl.c, on the audio thread) the voices added to the output
 (stereo, 48 kHz) */
 void voice_audio_mix(float *output, unsigned long frames);
+/* the same into an output at a rate (audio.sample_rate) that may not be the voices' own, 48000 */
+void voice_audio_mix_at(float *output, unsigned long frames, unsigned long rate);
 
 #endif

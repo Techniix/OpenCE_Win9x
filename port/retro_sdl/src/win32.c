@@ -1188,9 +1188,10 @@ bool SDL_SetWindowFullscreen(SDL_Window *window, bool fullscreen)
 
 bool SDL_SetWindowIcon(SDL_Window *window, SDL_Surface *icon)
 {
+	/* (the window's icon is halo.exe's own, which its resources give: nothing to set) */
 	(void)window;
 	(void)icon;
-	return SDL_SetError("the window's icon is its executable's");
+	return true;
 }
 
 SDL_Window *SDL_GetKeyboardFocus(void)
@@ -1203,6 +1204,8 @@ SDL_Window *SDL_GetKeyboardFocus(void)
 struct SDL_Cursor
 {
 	HCURSOR handle;
+	/* the system's arrow, which is not ours to destroy */
+	int shared;
 };
 
 static int cursor_shown = 1;
@@ -1254,22 +1257,98 @@ SDL_Cursor *SDL_GetDefaultCursor(void)
 	static SDL_Cursor arrow;
 
 	if (!arrow.handle)
+	{
 		arrow.handle = LoadCursorA(NULL, IDC_ARROW);
+		arrow.shared = 1;
+	}
 	return &arrow;
 }
 
+/* A pointer from a picture, for Windows 95 and 98: which have no alpha
+pointers and, in practice, 32 by 32 ones. The picture is made to fit in 32
+by 32 (nearest pixels) and each pixel is either drawn or not, by its alpha:
+the classic pointer's mask. */
 SDL_Cursor *SDL_CreateColorCursor(SDL_Surface *surface, int hot_x, int hot_y)
 {
-	(void)surface;
-	(void)hot_x;
-	(void)hot_y;
-	SDL_SetError("colour pointers are not supported");
-	return NULL;
+	enum { SIDE = 32 };
+	unsigned char color[SIDE * SIDE * 4], mask[SIDE * SIDE / 8];
+	int width, height, x, y;
+	ICONINFO info;
+	SDL_Cursor *cursor;
+	HBITMAP color_bitmap, mask_bitmap;
+
+	if (!surface || surface->w <= 0 || surface->h <= 0 || SDL_BYTESPERPIXEL(surface->format) != 4)
+	{
+		SDL_SetError("no pointer picture");
+		return NULL;
+	}
+	/* (the picture's own size when it is smaller, at the corner) */
+	width = surface->w > SIDE || surface->h > SIDE ?
+		(surface->w >= surface->h ? SIDE : (surface->w * SIDE + surface->h / 2) / surface->h) : surface->w;
+	height = surface->w > SIDE || surface->h > SIDE ?
+		(surface->h >= surface->w ? SIDE : (surface->h * SIDE + surface->w / 2) / surface->w) : surface->h;
+	if (width < 1)
+		width = 1;
+	if (height < 1)
+		height = 1;
+	memset(color, 0, sizeof(color));
+	memset(mask, 0xFF, sizeof(mask));	/* (1: the screen shows through) */
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			const unsigned char *pixel = (const unsigned char *)surface->pixels +
+				(size_t)(y * surface->h / height) * surface->pitch + (size_t)(x * surface->w / width) * 4;
+			unsigned char *out = color + (y * SIDE + x) * 4;
+
+			if (pixel[3] >= 128)
+			{
+				/* (RGBA in memory; the bitmap's order is blue, green, red) */
+				out[0] = pixel[2];
+				out[1] = pixel[1];
+				out[2] = pixel[0];
+				mask[y * (SIDE / 8) + x / 8] &= (unsigned char)~(0x80 >> (x % 8));
+			}
+		}
+	}
+	color_bitmap = CreateBitmap(SIDE, SIDE, 1, 32, color);
+	mask_bitmap = CreateBitmap(SIDE, SIDE, 1, 1, mask);
+	if (!color_bitmap || !mask_bitmap)
+	{
+		if (color_bitmap)
+			DeleteObject(color_bitmap);
+		if (mask_bitmap)
+			DeleteObject(mask_bitmap);
+		SDL_SetError("cannot make the pointer");
+		return NULL;
+	}
+	info.fIcon = FALSE;
+	info.xHotspot = (DWORD)(hot_x * width / surface->w);
+	info.yHotspot = (DWORD)(hot_y * height / surface->h);
+	info.hbmMask = mask_bitmap;
+	info.hbmColor = color_bitmap;
+	cursor = (SDL_Cursor *)calloc(1, sizeof(*cursor));
+	if (cursor)
+		cursor->handle = CreateIconIndirect(&info);
+	DeleteObject(color_bitmap);
+	DeleteObject(mask_bitmap);
+	if (!cursor || !cursor->handle)
+	{
+		free(cursor);
+		SDL_SetError("cannot make the pointer");
+		return NULL;
+	}
+	return cursor;
 }
 
 void SDL_DestroyCursor(SDL_Cursor *cursor)
 {
-	(void)cursor;
+	if (cursor && !cursor->shared)
+	{
+		if (cursor->handle)
+			DestroyCursor(cursor->handle);
+		free(cursor);
+	}
 }
 
 bool SDL_SetCursor(SDL_Cursor *cursor)

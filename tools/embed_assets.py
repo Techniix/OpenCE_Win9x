@@ -52,6 +52,31 @@ MENU_LIST = MENU_ASSETS / "menus.json"
 SMAA_ASSETS = Path("port/third_party/smaa")
 SMAA_FILES = (("SMAA.hlsl", "xgpu_smaa_shader"), ("area_tex.zlib", "xgpu_smaa_area_texture"),
               ("search_tex.zlib", "xgpu_smaa_search_texture"))
+def stored_png(path: Path) -> bytes:
+    """the picture as a PNG whose zlib stream is stored (uncompressed) blocks, of 8-bit
+    RGBA, which the Windows 9x build's reader (port/retro_sdl/src/common.c,
+    SDL_LoadPNG_IO) has no inflate for"""
+    import struct
+    import zlib
+    from PIL import Image
+
+    image = Image.open(path).convert("RGBA")
+    width, height = image.size
+    raw = b"".join(b"\x00" + image.tobytes()[row * width * 4:(row + 1) * width * 4] for row in range(height))
+    stream = b"\x78\x01"
+    for start in range(0, len(raw), 65535):
+        block = raw[start:start + 65535]
+        final = 1 if start + 65535 >= len(raw) else 0
+        stream += struct.pack("<BHH", final, len(block), len(block) ^ 0xFFFF) + block
+    stream += struct.pack(">I", zlib.adler32(raw))
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", stream) + chunk(b"IEND", b""))
+
+
 # the desktop windows' icon (tools/app_icon.py; port/linux/src/sdl_platform.c)
 WINDOW_ICON = Path("port/assets/icon/opence-icon-256.png")
 # the pointer the menus show in place of the system's (port/linux/src/sdl_platform.c)
@@ -291,14 +316,17 @@ def main() -> None:
         lines.append("};")
         lines.append(f"const unsigned long {symbol}_size = {len(data)};")
     # the windows' icon, a PNG (of size 0 where the checkout has none)
-    data = (ROOT / WINDOW_ICON).read_bytes() if (ROOT / WINDOW_ICON).is_file() else b""
+    # (--menus-only: none: the window's icon on Windows 9x is halo.exe's own, and a stored 256 by 256
+    # picture is a quarter of a megabyte for nothing)
+    data = (b"" if MENUS_ONLY else (ROOT / WINDOW_ICON).read_bytes()) if (ROOT / WINDOW_ICON).is_file() else b""
     lines.append("")
     lines.append("const unsigned int platform_window_icon[] = {")
     lines.extend(words(data) if data else ["\t0,"])
     lines.append("};")
     lines.append(f"const unsigned long platform_window_icon_size = {len(data)};")
     # the menus' pointer, a PNG (of size 0 where the checkout has none)
-    data = (ROOT / MENU_CURSOR).read_bytes() if (ROOT / MENU_CURSOR).is_file() else b""
+    data = (stored_png(ROOT / MENU_CURSOR) if MENUS_ONLY else (ROOT / MENU_CURSOR).read_bytes()) \
+        if (ROOT / MENU_CURSOR).is_file() else b""
     lines.append("")
     lines.append("const unsigned int platform_menu_cursor[] = {")
     lines.extend(words(data) if data else ["\t0,"])

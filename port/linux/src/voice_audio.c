@@ -57,6 +57,8 @@ struct voice_slot
 	/* the decoded samples, from read for count */
 	float ring[VOICE_RING_SAMPLES];
 	int read, count;
+	/* (at an output rate other than VOICE_RATE: how far between ring[read] and the next) */
+	double phase;
 	BOOL playing;
 	/* the gain and pan wanted, and those mixed last */
 	float gain, pan;
@@ -550,4 +552,66 @@ void voice_audio_mix(float *output, unsigned long frames)
 			slot->playing = FALSE;
 	}
 	pthread_mutex_unlock(&voice_lock);
+}
+
+/* the same at an output rate that is not VOICE_RATE (audio.sample_rate): the ring's samples
+are taken as many to an output frame as the rates' ratio says, between the two either side,
+so that the voice keeps its pitch */
+static void voice_audio_mix_resampled(float *output, unsigned long frames, unsigned long rate)
+{
+	double step = (double)VOICE_RATE / (double)rate;
+	int index;
+
+	pthread_mutex_lock(&voice_lock);
+	for (index = 0; index < VOICE_SLOTS; index++)
+	{
+		struct voice_slot *slot = &voice_slots[index];
+		float angle, left, right, step_left, step_right;
+		unsigned long frame;
+
+		if (!slot->used)
+			continue;
+		if (!slot->playing && slot->count >= VOICE_PREBUFFER_SAMPLES)
+		{
+			slot->playing = TRUE;
+			slot->phase = 0.0;
+		}
+		if (!slot->playing)
+			continue;
+		angle = (slot->pan + 1.0f) * 0.25f * 3.14159265f;
+		left = slot->gain * voice_volume * cosf(angle) * 1.41421356f;
+		right = slot->gain * voice_volume * sinf(angle) * 1.41421356f;
+		step_left = (left - slot->left) / (float)frames;
+		step_right = (right - slot->right) / (float)frames;
+		for (frame = 0; frame < frames && slot->count >= 2; frame++)
+		{
+			float first = slot->ring[slot->read];
+			float second = slot->ring[(slot->read + 1) % VOICE_RING_SAMPLES];
+			float sample = first + (second - first) * (float)slot->phase;
+
+			slot->left += step_left;
+			slot->right += step_right;
+			output[frame * 2] += sample * slot->left;
+			output[frame * 2 + 1] += sample * slot->right;
+			slot->phase += step;
+			while (slot->phase >= 1.0 && slot->count >= 2)
+			{
+				slot->phase -= 1.0;
+				slot->read = (slot->read + 1) % VOICE_RING_SAMPLES;
+				slot->count--;
+			}
+		}
+		/* (run out: it waits to buffer again) */
+		if (slot->count < 2)
+			slot->playing = FALSE;
+	}
+	pthread_mutex_unlock(&voice_lock);
+}
+
+void voice_audio_mix_at(float *output, unsigned long frames, unsigned long rate)
+{
+	if (rate == VOICE_RATE || !rate)
+		voice_audio_mix(output, frames);
+	else
+		voice_audio_mix_resampled(output, frames, rate);
 }

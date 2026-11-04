@@ -560,12 +560,133 @@ bool SDL_AddSurfaceAlternateImage(SDL_Surface *surface, SDL_Surface *image)
 
 /* (PNG: the window's icon, the menus' pointer and screenshots, which a
 backend without an encoder goes without) */
+/* The pictures this build embeds, which tools/embed_assets.py --menus-only
+writes as PNGs of 8-bit RGBA, not interlaced, whose zlib stream is stored
+(uncompressed) blocks: read here with no inflate. Anything else is refused. */
+static unsigned long png_big_endian(const unsigned char *bytes)
+{
+	return ((unsigned long)bytes[0] << 24) | ((unsigned long)bytes[1] << 16) | ((unsigned long)bytes[2] << 8) | bytes[3];
+}
+
+static int png_paeth(int a, int b, int c)
+{
+	int p = a + b - c, pa = p > a ? p - a : a - p, pb = p > b ? p - b : b - p, pc = p > c ? p - c : c - p;
+
+	return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+}
+
 SDL_Surface *SDL_LoadPNG_IO(SDL_IOStream *stream, bool close)
 {
+	static const unsigned char signature[8] = { 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A };
+	Sint64 size = stream ? SDL_GetIOSize(stream) : -1;
+	unsigned char *file = NULL, *packed = NULL, *raw = NULL;
+	size_t position = 8, packed_size = 0, raw_size = 0, row_bytes, offset;
+	unsigned long width = 0, height = 0;
+	SDL_Surface *surface = NULL;
+	const char *problem = "not a PNG";
+	unsigned long row, column;
+	int final = 0;
+
+	if (size > 8 && size < (Sint64)64 * 1024 * 1024)
+	{
+		file = (unsigned char *)malloc((size_t)size);
+		packed = (unsigned char *)malloc((size_t)size);
+	}
+	if (!file || !packed || SDL_ReadIO(stream, file, (size_t)size) != (size_t)size || memcmp(file, signature, 8))
+		goto done;
+	/* the chunks: IHDR for the shape, every IDAT's bytes joined */
+	problem = "unsupported PNG (8-bit RGBA, not interlaced, stored)";
+	while (position + 12 <= (size_t)size)
+	{
+		unsigned long length = png_big_endian(file + position);
+		const unsigned char *type = file + position + 4, *data = file + position + 8;
+
+		if (length > (unsigned long)size || position + 12 + length > (size_t)size)
+			goto done;
+		if (!memcmp(type, "IHDR", 4) && length >= 13)
+		{
+			width = png_big_endian(data);
+			height = png_big_endian(data + 4);
+			if (data[8] != 8 || data[9] != 6 || data[12] != 0 || !width || !height || width > 4096 || height > 4096)
+				goto done;
+		}
+		else if (!memcmp(type, "IDAT", 4))
+		{
+			memcpy(packed + packed_size, data, length);
+			packed_size += length;
+		}
+		else if (!memcmp(type, "IEND", 4))
+			break;
+		position += 12 + length;
+	}
+	if (!width || packed_size < 2 || (packed[0] & 0x0F) != 8)
+		goto done;
+	row_bytes = (size_t)width * 4 + 1;
+	raw = (unsigned char *)malloc(row_bytes * height);
+	if (!raw)
+		goto done;
+	/* the zlib stream's stored blocks */
+	for (offset = 2; !final;)
+	{
+		unsigned long length;
+
+		if (offset + 5 > packed_size)
+			goto done;
+		final = packed[offset] & 1;
+		if ((packed[offset] & 6) != 0)
+			goto done;	/* compressed */
+		length = packed[offset + 1] | ((unsigned long)packed[offset + 2] << 8);
+		if (length != (unsigned long)(~(packed[offset + 3] | ((unsigned long)packed[offset + 4] << 8)) & 0xFFFF) ||
+			offset + 5 + length > packed_size || raw_size + length > row_bytes * height)
+			goto done;
+		memcpy(raw + raw_size, packed + offset + 5, length);
+		raw_size += length;
+		offset += 5 + length;
+	}
+	if (raw_size != row_bytes * height)
+		goto done;
+	surface = SDL_CreateSurface((int)width, (int)height, SDL_PIXELFORMAT_RGBA32);
+	if (!surface)
+		goto done;
+	/* the filters, row by row, in the surface's own bytes */
+	for (row = 0; row < height; row++)
+	{
+		unsigned char *line = (unsigned char *)surface->pixels + row * surface->pitch;
+		const unsigned char *in = raw + row * row_bytes + 1;
+		const unsigned char *above = row ? line - surface->pitch : NULL;
+		int filter = raw[row * row_bytes];
+
+		if (filter > 4)
+		{
+			SDL_DestroySurface(surface);
+			surface = NULL;
+			goto done;
+		}
+		for (column = 0; column < width * 4; column++)
+		{
+			int left = column >= 4 ? line[column - 4] : 0, up = above ? above[column] : 0;
+			int corner = above && column >= 4 ? above[column - 4] : 0, value = in[column];
+
+			switch (filter)
+			{
+			case 1: value += left; break;
+			case 2: value += up; break;
+			case 3: value += (left + up) / 2; break;
+			case 4: value += png_paeth(left, up, corner); break;
+			}
+			line[column] = (unsigned char)value;
+		}
+	}
+	problem = NULL;
+done:
+	free(file);
+	free(packed);
+	free(raw);
 	if (stream && close)
 		SDL_CloseIO(stream);
-	SDL_SetError("PNG is not supported");
-	return NULL;
+	if (problem)
+		SDL_SetError("%s", problem);
+	return surface;
 }
 
 bool SDL_SavePNG(SDL_Surface *surface, const char *path)

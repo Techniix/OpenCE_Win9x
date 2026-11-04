@@ -19,4 +19,8 @@ void halo_budget_frame(void);
 from here on it is name's. The name must be a string that stays (a literal) */
 void halo_budget_enter(const char *name);
 
+/* the frame rate of the last report written (else the whole run's so far, else 0): what the setup
+window's benchmark tells at the end of its run */
+double halo_budget_result(void);
+
 #endif

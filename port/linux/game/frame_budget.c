@@ -52,6 +52,11 @@ static double last_time;
 static double window_start;
 static unsigned long window_frames;
 static double ticks_per_second;
+/* what halo_budget_result gives: the last report's rate, and the whole run's as the fallback */
+static double result_rate;
+static double run_start;
+static double run_seconds;
+static unsigned long run_frames;
 
 /* ---------- private code */
 
@@ -106,6 +111,8 @@ static void report(double elapsed)
 
 	for (index = 0; index < step_count; index++)
 		total += steps[index].seconds;
+	if (window_frames && elapsed > 0.0)
+		result_rate = window_frames / elapsed;
 	if (window_frames && total > 0.0)
 	{
 		platform_log("budget: %lu frames in %.1f s, %.2f frames a second, %.1f ms a frame; the steps below:",
@@ -151,6 +158,10 @@ void halo_budget_frame(void)
 		return;
 	}
 	window_frames++;
+	if (!run_start)
+		run_start = now;
+	run_frames++;
+	run_seconds = now - run_start;
 	if (now - window_start >= (double)window)
 	{
 		/* (the time up to now is the step it ended in) */
@@ -174,4 +185,11 @@ void halo_budget_enter(const char *name)
 	last_time = now;
 	next = step_find(name);
 	current = next;
+}
+
+double halo_budget_result(void)
+{
+	if (result_rate > 0.0)
+		return result_rate;
+	return run_seconds > 0.0 ? run_frames / run_seconds : 0.0;
 }

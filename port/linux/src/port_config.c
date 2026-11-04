@@ -108,6 +108,9 @@ static const struct config_setting config_settings[] =
 		"--setup (SETUP.BAT), shows it once; so does a run that did not end normally." },
 	{ "launcher.show_next_start", _config_boolean, "false", "HALO_LAUNCHER_NEXT", _environment_value, _platform_all,
 		"Show the Windows 9x build's setup window at the next start only." },
+	{ "launcher.benchmark", _config_boolean, "false", "HALO_LAUNCHER_BENCHMARK", _environment_value, _platform_all,
+		"The Windows 9x build's setup window made the last run a benchmark (debug.exit_after and\n"
+		"debug.frame_budget set for it); the next start takes them back. Not for setting by hand." },
 	{ "render.skip_passes", _config_string, "\"\"", "HALO_RENDER_SKIP_PASSES", _environment_value, _platform_all,
 		"Comma-separated passes of a frame not to draw, for a slow machine: object_shadows, lights_specular,\n"
 		"bsp_specular_lightmaps, bsp_reflection_masks, bsp_reflection_mirrors, bsp_reflections, bsp_fog,\n"
@@ -371,7 +374,7 @@ static const struct config_setting config_settings[] =
 		"audio.volume)." },
 	{ "audio.buffer_frames", _config_integer, "512", "HALO_AUDIO_BUFFER_FRAMES", _environment_value,
 		_platform_desktop,
-		"The audio device's buffer, in sample frames at 48 kHz (64 to 8192): larger\n"
+		"The audio device's buffer, in sample frames at the mixing rate (64 to 8192): larger\n"
 		"rides out stalls that cut the sound out, smaller has less delay (512\n"
 		"is 11 ms, 2048 is 43 ms)." },
 	{ "audio.channels", _config_string, "\"stereo\"", "HALO_AUDIO_CHANNELS", _environment_value, _platform_desktop,
@@ -384,7 +387,17 @@ static const struct config_setting config_settings[] =
 	{ "audio.resampler", _config_string, "\"sinc\"", "HALO_AUDIO_RESAMPLER", _environment_value, _platform_all,
 		"How sounds are converted to the output's rate: \"sinc\" with a\n"
 		"band-limited low pass; \"linear\" between neighbouring samples,\n"
-		"brighter for the aliasing it lets through." },
+		"brighter for the aliasing it lets through; \"auto\", sinc for the\n"
+		"loudest audio.sinc_voices voices and linear for the rest (the cheaper\n"
+		"mix for a slow machine, which the quiet voices hide)." },
+	{ "audio.sinc_voices", _config_integer, "6", "HALO_AUDIO_SINC_VOICES", _environment_value, _platform_all,
+		"With audio.resampler \"auto\": how many of the loudest voices keep the\n"
+		"sinc low pass (0 to 64), the rest being resampled linearly." },
+	{ "audio.sample_rate", _config_integer, "48000", "HALO_AUDIO_SAMPLE_RATE", _environment_value, _platform_all,
+		"The rate the sound is mixed and the device opened at, 8000 to 48000: a\n"
+		"lower one (22050, as the sound of the era's games) takes a proportionate\n"
+		"share of the processor, and loses the highest sounds. Read as the game\n"
+		"starts." },
 	{ "audio.voice_chat", _config_string, "\"push_to_talk\"", "HALO_VOICE_CHAT", _environment_value, _platform_all,
 		"Talking in network games' voice chat: \"push_to_talk\" (while\n"
 		"controls.push_to_talk is held; the microphone opens the first time),\n"
@@ -2074,7 +2087,7 @@ static const struct
 	{ "display.shield_glow_intensity", { "default", "light_show", NULL }, NULL },
 	{ "display.shield_color", { "default", "white", "black", "red", "blue", "gray", "yellow", "green", "pink",
 		"purple", "cyan", "cobalt", "orange", "teal", "sage", "brown", "tan", "maroon", "salmon", NULL }, NULL },
-	{ "audio.resampler", { "sinc", "linear", NULL }, NULL },
+	{ "audio.resampler", { "sinc", "linear", "auto", NULL }, NULL },
 	{ "audio.voice_chat", { "push_to_talk", "open_mic", "off", NULL }, NULL },
 	{ "input.touch_controls", { "auto", "on", "off", NULL }, NULL },
 	{ "game.console_log", { "important", "all", "none", NULL }, NULL },

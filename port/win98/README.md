@@ -15,7 +15,7 @@ be shared with later Mac OS 9 and DOS (Mesa on Glide) builds.
 | Memory window | Cannot be at 0x80000000 (below), so it moves: `configure.py --window-base` puts it elsewhere and the game relocates each map's tags and bsps as they load (`port/linux/game/tag_relocate.c`). Checked on all 24 retail maps (`map_validate --relocation`) and in play against a default build (`net_compare.py`), below. |
 | Compiling and linking (`build.py`, `include/`, `src/`, `runtime/`) | All 900 units compile for i686-w64-windows-gnu (i586, no CMOV, no SSE) on mingw-w64's headers, and link into build/win98/halo.exe: the game through hybrid precision, the Windows build's platform layer, the third-party libraries, and what Windows 9x lacks (below). Runs on Windows 98 SE (86Box: VIA Cyrix III, 128 MB) without drawing: loads ui.map and the main menu, plays its music to no device, and quits on time (first runs, below). |
 | SDL 3 | `port/retro_sdl`: the SDL 3 functions the platform layer calls, on Win32 (Windows 95 and later). Its time, threads, files and events run; its window, OpenGL and sound not yet. |
-| Setup window | `launcher/`: sliders and toggles (user32 only) before the game opens; below. Its choices are tested apart from the window (`launcher/test/launcher_test.py`); the window itself has not been run on a Windows 9x machine. |
+| Setup window | `launcher/`: sliders and toggles (user32 only) before the game opens; below. Its choices are tested apart from the window (`launcher/test/launcher_test.py`); the window has been seen opening on Windows 98 SE, but its layout has not been checked. |
 | OpenGL 1.1 renderer | `port/retro_gl`: Direct3D 8 on OpenGL 1.1 in place of the OpenGL 4.5 renderer (its README). First version, not yet run: the vertex programs on the processor, textures fitted to the card, the pixel shaders approximate. |
 
 ## Maths: hybrid precision
@@ -114,14 +114,30 @@ between identical builds (port/linux/NETCODE.md, "Comparing two builds").
 
 ## The setup window
 
-`launcher/win9x_launcher.c` shows a window before the game starts, with
-sliders (picture size, object detail, extras drawn, frame rate limit),
-toggles (V-Sync, smooth motion, PVS visibility, reverb, fast sound mixing,
-sound) and a display mode. It uses only user32's classes (the trackbar is
-comctl32's, which an early Windows 95 lacks, so the sliders are scroll
-bars). "Detect this PC" times the processor (`rdtsc` over 60 ms) and reads
-the memory, and suggests one of four presets: Fastest, Fast, Balanced,
-Best. The graphics card is not tested.
+`launcher/win9x_launcher.c` shows a window before the game starts, in the
+style of the setup programs of the time: a blue banner, group boxes (Picture,
+Detail, Sound), sliders and toggles, and a line of help at the bottom for the
+control under the pointer or with the focus. It is 616 by about 440 pixels, to
+fit a 640 by 480 screen.
+
+- Picture: display mode, picture size, frame limit, brightness (the display's
+  gamma ramp, `render.gamma`), V-Sync, smooth motion.
+- Detail: object detail, extras drawn, textures (`render.texture_detail`),
+  Keep up (`render.adaptive_fps`: lowers the detail by itself to hold a frame
+  rate), stored room sets (PVS).
+- Sound: quality (a stop of `audio.sample_rate`, `audio.resampler`,
+  `audio.sinc_voices` and `audio.buffer_frames` together), sound, room reverb.
+
+It uses only user32's classes (the trackbar is comctl32's, which an early
+Windows 95 lacks, so the sliders are scroll bars). "Detect this PC" times the
+processor (`rdtsc` over 60 ms) and reads the memory, and suggests one of four
+presets, Fastest, Fast, Balanced, Best, marking it "(suggested)" in the list.
+The graphics card is not tested. "Benchmark..." plays the main menu for 30
+seconds with the chosen settings (`debug.exit_after`, `debug.frame_budget`,
+`launcher.benchmark`), and as the program ends says how fast it ran and which
+preset suits (`launcher_advice`); the next start takes those settings back and
+shows the window. The main menu's scene is lighter than a game's: it is a
+guide, not a measure of a map in play.
 
 It comes up:
 
@@ -131,25 +147,47 @@ It comes up:
 - when `launcher.show_next_start` or `launcher.always` is true;
 - after a run that did not end normally: a run leaves `halo_running.flag`
   beside `halo.exe` and removes it on exit, so a crash or a hang leaves it,
-  and the window says so. This is how a setting that stops the game from
+  and the banner says so. This is how a setting that stops the game from
   starting can be taken back.
 
 `HALO_NO_LAUNCHER` and `--no-setup` skip it, as does a dedicated server.
 Its sliders write the same settings, in the same steps, as Video Setup,
-Performance in the game (`tools/port_settings.py`); `launcher_test.py`
-checks that the lists of passes agree.
+Performance and Audio Setup, Sound Processing in the game
+(`tools/port_settings.py`); `launcher_test.py` checks that the lists of
+passes agree. `BUDGET.BAT` runs the game with `debug.frame_budget`, which
+writes where each frame's time went to `HALO.log`.
+
+None of the window has run on a Windows 9x machine except through the
+emulated one's first runs: its layout, the help line, the banner, the
+benchmark, the gamma ramp and the colour pointer are compile-checked only.
 
 ## Detail while playing
 
-The setup window's Texture detail, Keep up and Brightness sliders write
-`render.texture_detail`, `render.adaptive_fps` and `render.gamma` (the same
-stops as Video Setup, Performance). In a game, Ctrl+Minus and Ctrl+Equals step
-the detail level down and up by hand (`render.hotkeys`), and with Keep up on
-the level follows the frame rate by itself (`port/linux/game/render_policy.c`).
-None of this has run on Windows 9x yet: the window's layout (two toggles to a
-row, three more sliders), the gamma ramp and the hotkeys are compile-checked
-only. The window is taller than before; if it does not fit 640 by 480, the
-layout in `win9x_launcher.c` is what to change.
+In a game, Ctrl+Minus and Ctrl+Equals step the detail level down and up by
+hand (`render.hotkeys`), and with Keep up on the level follows the frame rate
+by itself (`port/linux/game/render_policy.c`). Each change says so at the
+top left of the screen for a moment ("Detail: level 3 of 6",
+`port/linux/game/detail_notice.c`). The governor does not lower the detail
+when the rate is under an eighth of the one asked for: that is a map
+loading, or a machine too slow for the game itself, which no level helps.
+
+## Pointer and icon
+
+The menus' pointer is the port's own picture, 32 by 32 at most, drawn or not
+by each pixel's alpha (Windows 95 and 98 have no alpha pointers;
+`SDL_CreateColorCursor` in `port/retro_sdl/src/win32.c`). Its PNG is embedded
+with stored (uncompressed) blocks (`tools/embed_assets.py --menus-only`) so
+that `SDL_LoadPNG_IO` (`port/retro_sdl/src/common.c`) reads it with no
+inflate. The window's icon is `halo.exe`'s own and is not embedded.
+
+## Sound
+
+`audio.sample_rate` makes the software mixer (`port/linux/src/dsound_sdl.c`)
+run at a lower rate: the cost of the mix is proportional to it. The resampler
+`"auto"` gives the sinc low pass (most of a voice's cost) to the loudest
+`audio.sinc_voices` voices only. The voice chat's 48 kHz voices are resampled
+to the mix's rate (`voice_audio_mix_at`). The defaults (48000, `"sinc"`) mix as
+before.
 
 ## Building
 

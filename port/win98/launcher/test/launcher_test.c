@@ -71,6 +71,26 @@ int main(void)
 			failures++;
 		}
 	}
+	/* a benchmark's advice: a lighter preset below 20 frames a second, a heavier from 45, else the same */
+	{
+		static const double cases[][3] = { { LAUNCHER_PRESET_BALANCED, 8.0, LAUNCHER_PRESET_FAST },
+			{ LAUNCHER_PRESET_FASTEST, 8.0, LAUNCHER_PRESET_FASTEST }, { LAUNCHER_PRESET_FAST, 60.0, LAUNCHER_PRESET_BALANCED },
+			{ LAUNCHER_PRESET_BEST, 60.0, LAUNCHER_PRESET_BEST }, { LAUNCHER_PRESET_FAST, 30.0, LAUNCHER_PRESET_FAST },
+			{ LAUNCHER_PRESET_BEST, 0.0, LAUNCHER_PRESET_BEST } };
+		char text[200];
+
+		for (index = 0; index < (int)(sizeof(cases) / sizeof(cases[0])); index++)
+		{
+			int got = launcher_advice((int)cases[index][0], cases[index][1], text, sizeof(text));
+
+			if (got != (int)cases[index][2] || !text[0])
+			{
+				printf("FAIL advice(%d, %.1f) = %d, wanted %d\n", (int)cases[index][0], cases[index][1], got,
+					(int)cases[index][2]);
+				failures++;
+			}
+		}
+	}
 	/* the settings a preset writes, for launcher_test.py to compare with the menu's */
 	count = 0;
 	{

@@ -26,11 +26,13 @@ over what the passes before them did, and keep nothing that a later pass
 reads. A name that is not there is ignored, not an error.
 */
 
+#include <stdio.h>
 #include <string.h>
 
 #include "cseries.h"
 #include "cseries/errors.h"
 #include "render_policy.h"
+#include "detail_notice.h"
 #include "../src/port_config.h" /* port: port/linux/src/port_config.c */
 #include "../include/halo_render_stages.h"
 
@@ -168,6 +170,18 @@ float halo_render_lod_scale(void)
 }
 
 /* Ctrl+Minus and Ctrl+Equals: a step on the player's side of the level */
+/* "Detail: level 3 of 6", the screen's line for a moment (detail_notice.c) */
+static void level_notice(char const *note)
+{
+	char text[64];
+
+	if (effective_level() == 0)
+		sprintf(text, "Detail: full%s", note);
+	else
+		sprintf(text, "Detail: level %d of %d%s", effective_level(), MAXIMUM_LEVEL, note);
+	detail_notice_set(text);
+}
+
 void halo_render_level_adjust(int delta)
 {
 	int before = effective_level();
@@ -184,6 +198,9 @@ void halo_render_level_adjust(int delta)
 	if (effective_level() != before)
 		error(_error_silent, "render: performance level %d of %d (by the keys: %d, adaptive: %d)", effective_level(),
 			MAXIMUM_LEVEL, manual_level, governor_level);
+	/* (said even when the key changed nothing: the end of the scale is news too) */
+	level_notice(effective_level() == before && delta > 0 ? " (least detail)" :
+		effective_level() == before && delta < 0 ? " (most detail)" : "");
 }
 
 /* once for each frame drawn (render_frame): the governor, if render.adaptive_fps is on */
@@ -221,6 +238,7 @@ void halo_render_governor_frame(void)
 				governor_level++;
 				error(_error_silent, "render: %.1f frames a second, under %ld: performance level %d", rate, wanted,
 					effective_level());
+				level_notice(" (automatic)");
 			}
 		}
 		else if (rate > wanted * 1.4 && governor_level > 0)
@@ -231,6 +249,7 @@ void halo_render_governor_frame(void)
 				governor_level--;
 				error(_error_silent, "render: %.1f frames a second, well over %ld: performance level %d", rate, wanted,
 					effective_level());
+				level_notice(" (automatic)");
 			}
 		}
 		else

@@ -32,6 +32,7 @@ enum
 	LAUNCHER_DETAIL_MINIMUM = 15,	/* object detail, in percent, in steps of 5 */
 	LAUNCHER_DETAIL_MAXIMUM = 100,
 	LAUNCHER_DETAIL_STEP = 5,
+	LAUNCHER_SOUND_STOPS = 4,	/* low 22 kHz, medium 32 kHz, high 44 kHz, best 48 kHz */
 	LAUNCHER_TEXTURE_STOPS = 4,	/* full, half, quarter, eighth */
 	LAUNCHER_KEEP_UP_STOPS = 5,	/* off, 20, 25, 30, 40 */
 	LAUNCHER_BRIGHTNESS_MINIMUM = 50,
@@ -50,7 +51,7 @@ struct launcher_choices
 	int smooth_motion;
 	int pvs_visibility;
 	int reverb;
-	int fast_mixing;	/* audio.resampler "linear" rather than "sinc" */
+	int sound_quality;	/* the mixing quality's stop (LAUNCHER_SOUND_STOPS): rate, resampler and buffer together */
 	int sound;
 	int texture_detail;	/* render.texture_detail, 0 (full) to 3 (an eighth) */
 	int keep_up;		/* render.adaptive_fps: 0 off, else the frame rate held */
@@ -70,6 +71,10 @@ const char *launcher_scale_name(int stop);
 const char *launcher_fps_name(int stop);
 const char *launcher_extras_name(int stop);
 const char *launcher_texture_name(int stop);
+const char *launcher_sound_name(int stop);
+/* what a benchmark's frame rate says, for the preset it ran at: a sentence for the window's message,
+and the preset it suggests (the same one when the settings suit the machine) */
+int launcher_advice(int preset, double frames_a_second, char *text, unsigned long size);
 /* the frame rate a Keep Up stop holds (0: off), and the stop nearest a rate */
 int launcher_keep_up_fps(int stop);
 int launcher_keep_up_stop(int fps);
