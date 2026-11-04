@@ -913,7 +913,24 @@ static bool fullscreen_apply(SDL_Window *window, bool fullscreen)
 				device.dmFields |= DM_DISPLAYFREQUENCY;
 			}
 			if (ChangeDisplaySettingsA(&device, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL)
+			{
+				/* (a drawable smaller than any mode the card has, 320x240 or
+				160x120: 640x480 instead, which the drawable then is) */
+				if (fixed_width > 0 && fixed_width < 640 && mode == &fixed_mode)
+				{
+					device.dmPelsWidth = 640;
+					device.dmPelsHeight = 480;
+					device.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+					if (ChangeDisplaySettingsA(&device, CDS_FULLSCREEN) == DISP_CHANGE_SUCCESSFUL)
+					{
+						fixed_width = fixed_mode.w = 640;
+						fixed_height = fixed_mode.h = 480;
+						goto changed;
+					}
+				}
 				return SDL_SetError("cannot change the display to %dx%d", mode->w, mode->h);
+			}
+changed:;
 		}
 		current_mode = *mode;
 		SetWindowLongA(window->handle, GWL_STYLE, (LONG)(window_style(true, window->flags) |
@@ -1322,7 +1339,7 @@ static void window_size_fix(SDL_Window *window)
 {
 	int width, height;
 
-	if (!fixed_size_read())
+	if (!fixed_width && !fixed_size_read())
 		return;
 	width = fixed_width;
 	height = fixed_height;

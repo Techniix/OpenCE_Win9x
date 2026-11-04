@@ -1080,13 +1080,30 @@ static void raster_state_apply(void)
 
 /* ---------- tracing (debug.gpu_trace_frame: every draw of that frame) */
 
+/* the frame after Scroll Lock was pressed is traced too */
+static unsigned long trace_requested = (unsigned long)-1;
+
 static BOOL trace_frame(void)
 {
 	static long frame = -2;
 
 	if (frame == -2)
 		frame = config_integer("debug.gpu_trace_frame");
-	return frame >= 0 && (unsigned long)frame == device.frame;
+	return (frame >= 0 && (unsigned long)frame == device.frame) || device.frame == trace_requested;
+}
+
+static void trace_key_check(void)
+{
+#ifdef _WIN32
+	extern short (__stdcall *const retro_key_state)(int) __asm__("__imp__GetAsyncKeyState@4");
+
+	/* (VK_SCROLL: pressed since the last look) */
+	if (retro_key_state(0x91) & 1)
+	{
+		trace_requested = device.frame + 1;
+		platform_log("Direct3D: Scroll Lock pressed: frame %lu's draws traced", trace_requested);
+	}
+#endif
 }
 
 static void trace_draw(const char *kind, D3DPRIMITIVETYPE type, unsigned long count,
@@ -1599,6 +1616,7 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 			statistics.logged = now;
 		}
 	}
+	trace_key_check();
 	device.frame++;
 	retro_textures_begin_frame(device.frame);
 	platform_pump_events();
