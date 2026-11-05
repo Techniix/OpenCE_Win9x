@@ -111,11 +111,18 @@ static int step_compare(const void *a, const void *b)
 	return x < y ? 1 : x > y ? -1 : 0;
 }
 
+/* Windows 98 Notepad only breaks lines at CR LF, and the file is opened as bytes, so say it outright */
+#ifdef _WIN32
+#define BENCH_EOL "\r\n"
+#else
+#define BENCH_EOL "\n"
+#endif
+
 /* one line of BENCH.TXT (debug.bench_label): the label, the rate, the frame's time, the mixer's share and the
 biggest steps, to send back as a file that compares runs */
 static void bench_line(const char *label, double elapsed, double total, double audio_percent)
 {
-	FILE *file = fopen("BENCH.TXT", "a");
+	FILE *file = fopen("BENCH.TXT", "ab");
 	int index;
 
 	if (!file)
@@ -128,7 +135,7 @@ static void bench_line(const char *label, double elapsed, double total, double a
 			break;
 		fprintf(file, " %s %.1f;", steps[index].name, steps[index].seconds * 1000.0 / window_frames);
 	}
-	fprintf(file, "\n");
+	fprintf(file, BENCH_EOL);
 	fclose(file);
 }
 
@@ -163,11 +170,11 @@ static void report(double elapsed)
 					" for %.1f s of sound%s", percent, made, percent > 60.0 ? ": too much for this machine" : "");
 			if (label && label[0] && reporting_first)
 			{
-				FILE *file = fopen("BENCH.TXT", "a");
+				FILE *file = fopen("BENCH.TXT", "ab");
 
 				if (file)
 				{
-					fprintf(file, "%s | first frame (loading) %.1f s\n", label, elapsed);
+					fprintf(file, "%s | first frame (loading) %.1f s" BENCH_EOL, label, elapsed);
 					fclose(file);
 				}
 			}
@@ -297,11 +304,11 @@ void halo_load_timer_end(void)
 		platform_log("loading: precaching map '%s' took %.1f s", load_name, seconds);
 		if (label && label[0])
 		{
-			FILE *file = fopen("BENCH.TXT", "a");
+			FILE *file = fopen("BENCH.TXT", "ab");
 
 			if (file)
 			{
-				fprintf(file, "%s | loading map %s %.1f s\n", label, load_name, seconds);
+				fprintf(file, "%s | loading map %s %.1f s" BENCH_EOL, label, load_name, seconds);
 				fclose(file);
 			}
 		}
