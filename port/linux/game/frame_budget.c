@@ -58,6 +58,8 @@ static double result_rate;
 static double run_start;
 static double run_seconds;
 static unsigned long run_frames;
+static int first_frame_reported;
+static int reporting_first;
 /* the audio mixer's (its own thread, so not among the steps): seconds it was busy, and seconds of sound it made,
 since the last report */
 static volatile double audio_busy;
@@ -159,7 +161,17 @@ static void report(double elapsed)
 			if (made > 0.0)
 				platform_log("budget: the audio mixer (its own thread, beside the steps) used %.1f%% of real time"
 					" for %.1f s of sound%s", percent, made, percent > 60.0 ? ": too much for this machine" : "");
-			if (label && label[0])
+			if (label && label[0] && reporting_first)
+			{
+				FILE *file = fopen("BENCH.TXT", "a");
+
+				if (file)
+				{
+					fprintf(file, "%s | first frame (loading) %.1f s\n", label, elapsed);
+					fclose(file);
+				}
+			}
+			else if (label && label[0])
 				bench_line(label, elapsed, total, percent);
 		}
 	}
@@ -196,6 +208,24 @@ void halo_budget_frame(void)
 		return;
 	}
 	window_frames++;
+	/* the first frame includes the game's loading (the menu's map, its textures and shaders): reported
+	on its own, at once, so a run that ends inside it still says where that time went, and so the
+	frame rates after it are not dragged down by it */
+	if (!first_frame_reported && window_frames == 1)
+	{
+		double kept_rate = result_rate;
+
+		first_frame_reported = 1;
+		halo_budget_enter("frame start");
+		platform_log("budget: the first frame, which includes loading, took %.1f s; where it went:", now - window_start);
+		reporting_first = 1;
+		report(now - window_start);
+		reporting_first = 0;
+		result_rate = kept_rate;
+		window_start = clock_seconds();
+		last_time = window_start;
+		return;
+	}
 	if (!run_start)
 		run_start = now;
 	run_frames++;

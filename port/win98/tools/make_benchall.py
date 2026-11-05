@@ -105,7 +105,7 @@ def write(path, seconds):
         lines.append("halo.exe --no-setup")
     lines += ["", "echo done. Copy BENCH.TXT and HALO.log.", "pause", ""]
     minutes = len(all_runs) * (seconds + 15) / 60.0
-    lines[2] = "rem About %d minutes (%d runs of %d seconds, and the game's start each). Leave the machine alone; copy BENCH.TXT and HALO.log when it says done." % (
+    lines[2] = "rem About %d minutes (%d runs of %d seconds, the first 30 or so of each being the game's loading). Leave the machine alone; copy BENCH.TXT and HALO.log when it says done." % (
         round(minutes), len(all_runs), seconds)
     with open(path, "w", newline="") as f:
         f.write("\r\n".join(lines))
@@ -114,6 +114,6 @@ def write(path, seconds):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
-    ap.add_argument("--seconds", type=int, default=40)
+    ap.add_argument("--seconds", type=int, default=75)
     a = ap.parse_args()
     print("%d runs written to %s" % (write(a.out, a.seconds), a.out))

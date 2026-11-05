@@ -320,6 +320,35 @@ static posix_ulong default_route_address(void)
 	return result;
 }
 
+/* the addresses this machine's name has (Windows 9x's way: its stack tells no UDP socket its address before
+a send, and has no GetAdaptersAddresses): the first that is not loopback, nor self-assigned (169.254) */
+static posix_ulong host_name_address(void)
+{
+	char name[256];
+	struct hostent *host;
+	int index;
+
+	start_winsock();
+	if (gethostname(name, sizeof(name)) != 0)
+		return 0;
+	host = gethostbyname(name);
+	if (!host || host->h_addrtype != AF_INET || !host->h_addr_list)
+		return 0;
+	for (index = 0; host->h_addr_list[index]; index++)
+	{
+		unsigned char const *bytes = (unsigned char const *)host->h_addr_list[index];
+
+		if (bytes[0] != 127 && bytes[0] != 0 && !(bytes[0] == 169 && bytes[1] == 254))
+		{
+			posix_ulong address;
+
+			memcpy(&address, bytes, sizeof(address));
+			return address;
+		}
+	}
+	return 0;
+}
+
 posix_ulong posix_local_ipv4_address(void)
 {
 	ULONG size = 16 * 1024;
@@ -362,7 +391,7 @@ posix_ulong posix_local_ipv4_address(void)
 		}
 	}
 	free(adapters);
-	return result;
+	return result ? result : host_name_address();
 }
 
 void posix_random_bytes(void *buffer, posix_ulong size)

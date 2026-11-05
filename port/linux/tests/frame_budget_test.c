@@ -67,17 +67,19 @@ int main(void)
 	}
 	{
 		FILE *bench = fopen("BENCH.TXT", "r");
-		char line[256] = "";
+		char line[256] = "", first[256] = "";
 
 		if (bench)
 		{
+			/* (the first line is the first frame's, then each report's) */
+			fgets(first, sizeof(first), bench);
 			fgets(line, sizeof(line), bench);
 			fclose(bench);
 			remove("BENCH.TXT");
 		}
-		if (strncmp(line, "testrun | ", 10) || !strstr(line, "audio 25.0%"))
+		if (!strstr(first, "first frame (loading)") || strncmp(line, "testrun | ", 10) || !strstr(line, "audio 25.0%"))
 		{
-			puts("FAIL: BENCH.TXT line");
+			puts("FAIL: BENCH.TXT lines");
 			failures++;
 		}
 	}

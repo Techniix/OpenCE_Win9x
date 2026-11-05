@@ -36,7 +36,7 @@ Run SELFTEST.BAT. A box says "N failed, M warnings". Open SELFTEST.TXT.
 STEP 2  (3 min)  TESTALL.BAT
 ---------------------------------------------------------------------
 Runs the self test, import_check (a box to click OK at the end of each; are all the system functions the game calls
-present on this Windows?) and 30 seconds of the game with timing on.
+present on this Windows?) and 75 seconds of the game with timing on (the first part is the game loading).
  - import_check.txt should list nothing missing. Anything listed is a game feature
    that will fail on that Windows version.
  - HALO.log: lines starting "budget:" say where each frame's time went, and
@@ -44,9 +44,9 @@ present on this Windows?) and 30 seconds of the game with timing on.
    lower the sound quality (step 5).
 
 ---------------------------------------------------------------------
-STEP 3  (20 min)  BENCHALL.BAT  (start it, walk away)
+STEP 3  (35 min)  BENCHALL.BAT  (start it, walk away)
 ---------------------------------------------------------------------
-Runs 22 settings one after another, about 40 seconds each; nothing to click.
+Runs 22 settings one after another, about 75 seconds each (the first 30 or so are the game loading); nothing to click.
 When it says done, copy BENCH.TXT (one line per run: name, frames a second,
 ms a frame, audio mixer %, biggest steps). Run it on the VM and on the desktop
 (rename the file between: BENCH_vm.TXT, BENCH_desktop.TXT). Close everything else
@@ -136,7 +136,7 @@ STEP 8  (10 min)  Desktop-only comparison
 ---------------------------------------------------------------------
 Your desktop ran the pre-change build well. Run BENCHALL.BAT and TESTALL.BAT
 on it. If you still have the old halo.exe, run it with BUDGET.BAT's settings
-in the main menu for 30 s and compare "frames a second" against the "best"
+in the main menu for 30 s and compare "frames a second" against the "preset-best"
 preset line in BENCH.TXT: they should be about the same (the new code is
 render-only and should cost almost nothing at the Best preset). A big drop
 is a regression: send both HALO.log files.
