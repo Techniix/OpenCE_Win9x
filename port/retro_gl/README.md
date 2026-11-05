@@ -12,6 +12,7 @@ functions, so the game's renderer (`source/rasterizer`) is unchanged on top.
 | `src/retro_device.c` | The device: state, the screen (the Xbox's 640x480, letterboxed in the window), draws, clears, presentation, the 60 Hz vertical blank, the menus' pointer. |
 | `src/retro_vertex.c` | The game's vertex programs (NV2A microcode) run on the processor, each decoded once; their positions handed to OpenGL in clip space. |
 | `src/retro_pixel.c` | The pixel shaders (register combiners) on the texture units. |
+| `src/retro_affine.c` | Finds the draws whose combiners are a scale and an offset of the vertex color, so that their vertices skip the combiners on the processor (checked by `tests/retro_affine_test.py`; each new shader is logged as "by a scale and an offset" or "by the combiners"). |
 | `src/retro_textures.c` | Textures: the Xbox formats decoded, made a power of two each way and no larger than the card takes, 16 bits a texel, mip levels; the menus' PNG art. |
 | `src/retro_gl.c`, `include/retro_gl.h` | OpenGL 1.1 and its extensions, looked up through SDL. |
 | `src/retro_shim.c` | What the platform layer calls of the replaced files besides the device. |

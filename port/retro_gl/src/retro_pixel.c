@@ -22,6 +22,7 @@ the units cannot; each new shader is logged once with what it reads.
 */
 
 #include "retro_internal.h"
+#include "retro_affine.h"
 
 #include <string.h>
 
@@ -417,7 +418,117 @@ static int stage_kind(const struct retro_vertex *vertex, int stage)
 	return color_difference(with, without) > 0.004f ? _stage_add : _stage_unused;
 }
 
+static void retro_pixel_vertex_colors_by_combiners(struct retro_vertex *vertices, unsigned long count);
+
+/* ---------- the draws whose combiners are a line (retro_affine.c) */
+
+/* the lines found for the shaders seen, by everything the combiners read (the shader's words, the
+constants, the fog color and the textures' stand-ins), so that a draw with the same state again does not
+look again; the oldest is replaced */
+#define AFFINE_CACHE 32
+/* (a draw with fewer vertices is run on the combiners: finding the line costs about this many vertices) */
+#define AFFINE_MINIMUM_VERTICES 64
+
+struct affine_entry
+{
+	DWORD words[54];
+	float textures[4][4];
+	struct retro_affine line;
+};
+
+static struct affine_entry affine_entries[AFFINE_CACHE];
+static unsigned long affine_known, affine_next, affine_logged;
+
+static void affine_words(DWORD *words)
+{
+	DWORD *state = D3D__RenderState;
+	unsigned long index, at = 0;
+
+	for (index = 0; index < 8; index++)
+	{
+		words[at++] = state[D3DRS_PSRGBINPUTS0 + index];
+		words[at++] = state[D3DRS_PSALPHAINPUTS0 + index];
+		words[at++] = state[D3DRS_PSRGBOUTPUTS0 + index];
+		words[at++] = state[D3DRS_PSALPHAOUTPUTS0 + index];
+		words[at++] = state[D3DRS_PSCONSTANT0_0 + index];
+		words[at++] = state[D3DRS_PSCONSTANT1_0 + index];
+	}
+	words[at++] = state[D3DRS_PSCOMBINERCOUNT];
+	words[at++] = state[D3DRS_PSFINALCOMBINERINPUTSABCD];
+	words[at++] = state[D3DRS_PSFINALCOMBINERINPUTSEFG];
+	words[at++] = state[D3DRS_PSFINALCOMBINERCONSTANT0];
+	words[at++] = state[D3DRS_PSFINALCOMBINERCONSTANT1];
+	words[at++] = state[D3DRS_FOGCOLOR];
+}
+
+static void affine_run(const float *diffuse, const float *specular, float fog, float *result, void *context)
+{
+	(void)context;
+	combiners_run(diffuse, specular, fog, (const float (*)[4])vertex_textures, result);
+}
+
+/* the line for this draw's shader, or NULL when it is not one */
+static const struct retro_affine *affine_for_draw(void)
+{
+	struct affine_entry *entry;
+	DWORD words[54];
+	unsigned long index;
+
+	affine_words(words);
+	for (index = 0; index < affine_known; index++)
+	{
+		if (!memcmp(affine_entries[index].words, words, sizeof(words)) &&
+			!memcmp(affine_entries[index].textures, vertex_textures, sizeof(vertex_textures)))
+			return affine_entries[index].line.valid ? &affine_entries[index].line : NULL;
+	}
+	index = affine_next;
+	affine_next = (affine_next + 1) % AFFINE_CACHE;
+	if (affine_known < AFFINE_CACHE)
+		affine_known++;
+	entry = &affine_entries[index];
+	memcpy(entry->words, words, sizeof(words));
+	memcpy(entry->textures, vertex_textures, sizeof(vertex_textures));
+	retro_affine_fit(&entry->line, affine_run, NULL);
+	if (affine_logged < 64)
+	{
+		affine_logged++;
+		platform_log("pixel shader %08lx: %s", retro_pixel_hash(),
+			entry->line.valid ? "vertex colors by a scale and an offset (no combiners per vertex)" :
+			"vertex colors by the combiners");
+	}
+	return entry->line.valid ? &entry->line : NULL;
+}
+
 void retro_pixel_vertex_colors(struct retro_vertex *vertices, unsigned long count)
+{
+	if (count >= AFFINE_MINIMUM_VERTICES)
+	{
+		const struct retro_affine *line = affine_for_draw();
+
+		if (line)
+		{
+			unsigned long vertex;
+
+			for (vertex = 0; vertex < count; vertex++)
+			{
+				unsigned char *color = vertices[vertex].diffuse;
+				int component;
+
+				for (component = 0; component < 4; component++)
+				{
+					float value = line->scale[component] * (color[component] * (1.0f / 255.0f)) + line->offset[component];
+
+					value = value < 0.0f ? 0.0f : value > 1.0f ? 1.0f : value;
+					color[component] = (unsigned char)(value * 255.0f + 0.5f);
+				}
+			}
+			return;
+		}
+	}
+	retro_pixel_vertex_colors_by_combiners(vertices, count);
+}
+
+static void retro_pixel_vertex_colors_by_combiners(struct retro_vertex *vertices, unsigned long count)
 {
 	/* (the combiners' result for the last few inputs: within a draw the
 	constants and textures are the same, and most of its vertices share a
