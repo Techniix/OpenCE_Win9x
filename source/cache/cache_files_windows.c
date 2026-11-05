@@ -674,6 +674,12 @@ boolean cache_files_precache_map_begin(
 				sizeof(cache_file_globals.copying_to_map_file_name) - 1] = 0;
 			cache_file_get_map_path(cache_map_name, path);
 			error(_error_silent, "starting precaching of map '%s'", cache_map_name);
+			/* port: when it started, for the line that says how long it took (below) */
+			{
+				extern void halo_load_timer_begin(char const *name);
+
+				halo_load_timer_begin(cache_map_name);
+			}
 			cache_copy_begin(
 				buffer,
 				buffer_size,
@@ -941,6 +947,11 @@ short cache_files_precache_map_status(
 
 		case _cache_copy_finished:
 			status = _cached_map_file_success;
+			{
+				extern void halo_load_timer_end(void);
+
+				halo_load_timer_end();
+			}
 			break;
 
 		default:

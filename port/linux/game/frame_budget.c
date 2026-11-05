@@ -274,3 +274,37 @@ void halo_budget_audio(double started, double seconds_of_sound)
 	audio_busy += clock_seconds() - started;
 	audio_made += seconds_of_sound;
 }
+
+/* ---------- how long a map takes to load (the precache's copy: the long wait on the loading screen) */
+
+static char load_name[64];
+static double load_started;
+
+void halo_load_timer_begin(char const *name)
+{
+	strncpy(load_name, name ? name : "", sizeof(load_name) - 1);
+	load_name[sizeof(load_name) - 1] = 0;
+	load_started = clock_seconds();
+}
+
+void halo_load_timer_end(void)
+{
+	if (load_started != 0.0)
+	{
+		const char *label = config_string("debug.bench_label");
+		double seconds = clock_seconds() - load_started;
+
+		platform_log("loading: precaching map '%s' took %.1f s", load_name, seconds);
+		if (label && label[0])
+		{
+			FILE *file = fopen("BENCH.TXT", "a");
+
+			if (file)
+			{
+				fprintf(file, "%s | loading map %s %.1f s\n", label, load_name, seconds);
+				fclose(file);
+			}
+		}
+		load_started = 0.0;
+	}
+}

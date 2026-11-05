@@ -1,5 +1,8 @@
 HALO FOR WINDOWS 9X: WHAT TO TEST, AND IN WHAT ORDER
 =====================================================
+IMPORTANT: close the game before copying HALO.log (Windows 98 shows a file that is
+still open as empty). BENCH.TXT can be copied at any time.
+
 Everything below is written for the files on the CD (the CD) copied into one
 folder on the machine (copy them all beside halo.exe; a CD is read-only, so copy,
 do not run from it). Do the VM first, then the desktop. Send me back, from the

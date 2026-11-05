@@ -25,6 +25,12 @@ threads, asynchronous procedure calls, time, memory and debug output.
 
 /* ---------- logging */
 
+#ifdef _WIN32
+/* msvcrt's (the descriptor's: _commit asks the system to write the file out) */
+int _fileno(FILE *stream);
+int _commit(int descriptor);
+#endif
+
 void platform_log(const char *format, ...)
 {
 	va_list arguments;
@@ -34,6 +40,21 @@ void platform_log(const char *format, ...)
 	vfprintf(stderr, format, arguments);
 	va_end(arguments);
 	fputc('\n', stderr);
+#ifdef _WIN32
+	{
+		/* Windows 9x keeps a file's length in memory until it is closed or committed: halo.log, copied
+		while the game still runs (or after it was killed), reads empty. Once a second at most, as the
+		write to the disk takes time (and a log line is no reason to wait for it each time) */
+		static time_t committed;
+		time_t now = time(NULL);
+
+		if (now != committed)
+		{
+			committed = now;
+			_commit(_fileno(stderr));
+		}
+	}
+#endif
 }
 
 void platform_unimplemented(const char *name)
