@@ -18,7 +18,8 @@
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_visibility" x="54" y="133"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_adaptive_fps" x="54" y="163"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_texture_detail" x="54" y="193"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_gamma" x="54" y="223"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_skip_cutscenes" x="54" y="223"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_gamma" x="54" y="253"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/button_bar" y="414"/>
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/button_bar" type="column_list" width="640" height="28" flags="pass_unhandled_to_focused_child left_right_tabs_items">
@@ -71,11 +72,20 @@
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/texture_detail_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="FULL|HALF|QUARTER|EIGHTH" setting="render.texture_detail" values="0|1|2|3" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
 	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_skip_cutscenes" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/skip_cutscenes_label"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/skip_cutscenes_spinner" x="320" y="1"/>
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/skip_cutscenes_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/labels" string_index="5" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	</widget>
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/skip_cutscenes_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="PLAY|SKIP" setting="game.skip_cutscenes" values="false|true" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+		<on event="created" run="port setting load"/>
+	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/op_gamma" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/gamma_label"/>
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/gamma_spinner" x="320" y="1"/>
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/gamma_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/labels" string_index="5" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/gamma_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/labels" string_index="6" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/gamma_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="0.7|0.85|1.0|1.2|1.4|1.7" setting="render.gamma" values="0.7|0.85|1.0|1.2|1.4|1.7" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
 		<on event="created" run="port setting load"/>
@@ -96,6 +106,7 @@
 		<string text="VISIBILITY:"/>
 		<string text="KEEP UP:"/>
 		<string text="TEXTURE DETAIL:"/>
+		<string text="CUTSCENES:"/>
 		<string text="BRIGHTNESS:"/>
 	</strings>
 	<strings name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/performance/help_strings">
@@ -105,6 +116,7 @@
 		<string text="Which rooms are drawn. Portals: those the doors\nshow. PVS: the map's stored set; a lighter search."/>
 		<string text="Lowers the detail a step at a time to hold this frame\nrate, and raises it again. Ctrl+Minus/Equals by hand."/>
 		<string text="Smaller world textures: less video memory. Applies\nto textures loaded after the change (next map)."/>
+		<string text="Skip a level's cutscenes by themselves, for a slow\nmachine. Single player only; co-op still votes."/>
 		<string text="The display's gamma, for a screen darker than the\nXbox's television. 1.0 leaves it alone."/>
 	</strings>
 </menus>

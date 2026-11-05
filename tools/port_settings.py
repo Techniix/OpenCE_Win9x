@@ -346,6 +346,8 @@ SCREENS["video_settings/performance"] = {
         ("TEXTURE DETAIL:", "render.texture_detail",
          [("FULL", "0"), ("HALF", "1"), ("QUARTER", "2"), ("EIGHTH", "3")],
          "Smaller world textures: less video memory. Applies\nto textures loaded after the change (next map).", None),
+        ("CUTSCENES:", "game.skip_cutscenes", [("PLAY", "false"), ("SKIP", "true")],
+         "Skip a level's cutscenes by themselves, for a slow\nmachine. Single player only; co-op still votes.", None),
         ("BRIGHTNESS:", "render.gamma",
          [("0.7", "0.7"), ("0.85", "0.85"), ("1.0", "1.0"), ("1.2", "1.2"), ("1.4", "1.4"), ("1.7", "1.7")],
          "The display's gamma, for a screen darker than the\nXbox's television. 1.0 leaves it alone.", None),

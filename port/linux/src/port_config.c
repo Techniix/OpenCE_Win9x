@@ -124,6 +124,10 @@ static const struct config_setting config_settings[] =
 		"Keep the frame rate at least this by lowering the picture's detail a level at a time (the objects'\n"
 		"detail scale, then the passes of render.skip_passes), and raising it again when there is room; 0\n"
 		"off. Only the picture changes: if the game itself is what holds the processor, no level helps." },
+	{ "game.skip_cutscenes", _config_boolean, "false", "HALO_SKIP_CUTSCENES", _environment_value, _platform_all,
+		"Skip each level's cutscenes by itself, as soon as the game lets a player skip (as pressing Accept\n"
+		"does), for a machine too slow to sit through them. Local games only: network co-op keeps its vote,\n"
+		"and a network game's other machines are not touched (port/linux/game/cutscene_skip.c)." },
 	{ "render.hotkeys", _config_boolean, "true", "HALO_RENDER_HOTKEYS", _environment_value, _platform_all,
 		"Ctrl+Minus and Ctrl+Equals in a game step the picture's detail down and up (Quake's +/-), for when\n"
 		"the menus are too slow to use." },

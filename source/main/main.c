@@ -386,6 +386,7 @@ symbols in this file:
 #include "network_aim_assist.h" /* port: port/linux/game/network_aim_assist.c */
 #include "network_shield_effects.h" /* port: port/linux/game/network_shield_effects.c */
 #include "map_share.h" /* port: port/linux/game/map_share.c */
+#include "cutscene_skip.h" /* port: port/linux/game/cutscene_skip.c */
 #include "profile_sections.h" /* port: port/linux/include/profile_sections.h */
 #ifdef HALO_PROFILE
 #include "profile_trace.h" /* port: port/linux/src/profile_trace.c */
@@ -3513,6 +3514,12 @@ static boolean main_loop_iteration(
 			if (main_globals.revert_map)
 			{
 				main_revert_map_private();
+			}
+
+			/* port: game.skip_cutscenes skips as the player's Accept would */
+			if (!main_globals.skip_cinematic && cutscene_skip_due())
+			{
+				main_globals.skip_cinematic = TRUE;
 			}
 
 			if (main_globals.skip_cinematic)
