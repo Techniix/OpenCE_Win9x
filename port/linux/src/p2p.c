@@ -3509,7 +3509,10 @@ const char *p2p_take_clipboard_text(void)
 
 	if (!p2p.running)
 		return NULL;
-	pthread_mutex_lock(&p2p_lock);
+	/* (asked every frame by the game's thread: if the network thread has the lock, the next frame asks
+	again; a frame never waits on the network) */
+	if (pthread_mutex_trylock(&p2p_lock) != 0)
+		return NULL;
 	if (p2p.has_clipboard)
 	{
 		memcpy(text, p2p.clipboard, sizeof(text));

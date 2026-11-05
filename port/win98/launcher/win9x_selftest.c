@@ -183,13 +183,21 @@ static void test_loopback(void)
 	posix_socket_close(client);
 	posix_socket_close(listener);
 	{
+		double started = seconds_now();
 		posix_ulong local = posix_local_ipv4_address();
+		double took = seconds_now() - started;
 
 		sprintf(buffer, "%lu.%lu.%lu.%lu", local & 255, (local >> 8) & 255, (local >> 16) & 255, local >> 24);
 		if (local)
 			result("info", "this machine's address", buffer);
 		else
 			warn("this machine's address", "none found: no network adapter, or no address yet");
+		/* (it is asked for by the game's frames: it must return at once, and the second time from memory) */
+		sprintf(buffer, "%.1f ms the first time", took * 1000.0);
+		started = seconds_now();
+		posix_local_ipv4_address();
+		sprintf(buffer + strlen(buffer), ", %.3f ms after", (seconds_now() - started) * 1000.0);
+		pass_or_fail("address lookup is quick", took < 0.5, buffer);
 	}
 }
 
@@ -504,6 +512,21 @@ static void test_sound_and_display(void)
 	pass_or_fail("display modes", modes > 0 && has_640, detail);
 }
 
+static void test_speed(void)
+{
+	double started;
+	long index, sum = 0;
+	char detail[160];
+
+	line("--- this machine's speed (what the game's own lookups cost)");
+	started = seconds_now();
+	for (index = 0; index < 20000; index++)
+		sum += config_integer("debug.frame_budget");
+	sprintf(detail, "%.2f microseconds for a setting looked up by name (the sum %ld)",
+		(seconds_now() - started) * 1000000.0 / 20000.0, sum);
+	result("info", "setting lookup", detail);
+}
+
 static void test_files(void)
 {
 	static const char *const wanted[] = { "halo.exe", "config.toml", "brokers.txt", "HALO.log", "BENCH.TXT" };
@@ -545,6 +568,7 @@ int win9x_selftest_run(void)
 	test_loopback();
 	test_network();
 	test_sound_and_display();
+	test_speed();
 	test_files();
 	line("--- done");
 	sprintf(summary, "%d failed, %d warnings", failures, warnings);

@@ -128,6 +128,38 @@ static int effective_level(void)
 	return level < 0 ? 0 : level > MAXIMUM_LEVEL ? MAXIMUM_LEVEL : level;
 }
 
+/* ---------- the settings, kept
+
+The settings are looked up by name (port_config.c: a scan of its table), and these are asked for once for
+each object and pass drawn, every frame: on a slow processor that scan was a share of the frame. They are
+read again only when a setting has changed (config_changes). */
+
+static struct
+{
+	unsigned long seen;
+	int loaded;
+	const char *skip_passes;
+	int pvs;
+	double lod_scale;
+} settings;
+
+static void settings_refresh(void)
+{
+	unsigned long changes = config_changes();
+
+	if (settings.loaded && settings.seen == changes)
+		return;
+	settings.seen = changes;
+	settings.loaded = 1;
+	settings.skip_passes = config_string("render.skip_passes");
+	{
+		const char *mode = config_string("render.visibility");
+
+		settings.pvs = mode && !strcmp(mode, "pvs");
+	}
+	settings.lod_scale = config_real("render.lod_scale");
+}
+
 /* ---------- public code */
 
 /* whether the pass named is to be drawn: FALSE if it may be skipped and
@@ -138,7 +170,8 @@ unsigned char halo_render_pass_enabled(const char *name)
 
 	if (!length || !pass_is_skippable(name, length))
 		return TRUE;
-	if (list_has(config_string("render.skip_passes"), name, length))
+	settings_refresh();
+	if (list_has(settings.skip_passes, name, length))
 		return FALSE;
 	return !list_has(stage_lists[levels[effective_level()].stage], name, length);
 }
@@ -150,9 +183,8 @@ more clusters for a lighter traversal. Only the picture changes: the stored
 set is read by the game's other systems too (AI, sound, objects), unchanged */
 unsigned char halo_render_visibility_pvs(void)
 {
-	const char *mode = config_string("render.visibility");
-
-	return mode && !strcmp(mode, "pvs");
+	settings_refresh();
+	return settings.pvs;
 }
 
 /* the factor an object's size on the screen is multiplied by to choose its
@@ -160,8 +192,10 @@ level of detail (render_objects.c): below 1 the objects use the coarser levels
 sooner. render.lod_scale, and the performance level's */
 float halo_render_lod_scale(void)
 {
-	double scale = config_real("render.lod_scale");
+	double scale;
 
+	settings_refresh();
+	scale = settings.lod_scale;
 	if (!(scale >= MINIMUM_LOD_SCALE))
 		scale = scale == 0.0 ? 1.0 : MINIMUM_LOD_SCALE;
 	if (scale > MAXIMUM_LOD_SCALE)

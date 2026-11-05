@@ -320,14 +320,51 @@ static posix_ulong default_route_address(void)
 	return result;
 }
 
-/* the addresses this machine's name has (Windows 9x's way: its stack tells no UDP socket its address before
-a send, and has no GetAdaptersAddresses): the first that is not loopback, nor self-assigned (169.254) */
+/* the addresses of this machine's adapters from the IP address table (iphlpapi's GetIpAddrTable, which
+Windows 98 has and Windows 95 may not: looked up when asked; it reads the stack's own table, with no name
+lookups, so it returns at once): the first that is not loopback, nor self-assigned (169.254) */
+static posix_ulong ip_table_address(void)
+{
+	typedef DWORD (WINAPI *table_function)(PMIB_IPADDRTABLE, PULONG, BOOL);
+	HMODULE library = LoadLibraryA("iphlpapi.dll");
+	table_function function = library ? (table_function)GetProcAddress(library, "GetIpAddrTable") : NULL;
+	ULONG size = 0;
+	PMIB_IPADDRTABLE table;
+	posix_ulong result = 0;
+	DWORD index;
+
+	if (!function)
+		return 0;
+	function(NULL, &size, FALSE);
+	if (!size || size > 64 * 1024 || !(table = malloc(size)))
+		return 0;
+	if (function(table, &size, FALSE) == NO_ERROR)
+	{
+		for (index = 0; index < table->dwNumEntries && !result; index++)
+		{
+			unsigned char const *bytes = (unsigned char const *)&table->table[index].dwAddr;
+
+			if (table->table[index].dwAddr && bytes[0] != 127 && !(bytes[0] == 169 && bytes[1] == 254))
+				result = table->table[index].dwAddr;
+		}
+	}
+	free(table);
+	return result;
+}
+
+/* the addresses this machine's name has (Windows 95, which has no IP table function: asked once, as the
+name's lookup can take seconds on a machine whose name is not known): the first that is not loopback, nor
+self-assigned (169.254) */
 static posix_ulong host_name_address(void)
 {
+	static int asked;
 	char name[256];
 	struct hostent *host;
 	int index;
 
+	if (asked)
+		return 0;
+	asked = 1;
 	start_winsock();
 	if (gethostname(name, sizeof(name)) != 0)
 		return 0;
@@ -349,7 +386,26 @@ static posix_ulong host_name_address(void)
 	return 0;
 }
 
+/* (the address is asked for by the network thread, under its lock, and by the game's frames: the answer is
+kept a while, and what is asked of the system is asked rarely) */
+static posix_ulong local_address_uncached(void);
+
 posix_ulong posix_local_ipv4_address(void)
+{
+	static posix_ulong kept;
+	static DWORD kept_at;
+	static int have_kept;
+	DWORD now = GetTickCount();
+
+	if (have_kept && now - kept_at < (kept ? 15000UL : 5000UL))
+		return kept;
+	kept = local_address_uncached();
+	kept_at = now;
+	have_kept = 1;
+	return kept;
+}
+
+static posix_ulong local_address_uncached(void)
 {
 	ULONG size = 16 * 1024;
 	IP_ADAPTER_ADDRESSES *adapters = NULL, *adapter;
@@ -358,6 +414,9 @@ posix_ulong posix_local_ipv4_address(void)
 
 	/* no route out (a network without the internet): the first adapter
 	that is up and not loopback */
+	if (result)
+		return result;
+	result = ip_table_address();
 	if (result)
 		return result;
 	do
